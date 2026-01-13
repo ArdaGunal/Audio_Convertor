@@ -1,16 +1,15 @@
 "use client";
 
 import React, { useState } from "react";
-import { Github, Music, Video, Zap, ChevronRight, Wrench, Sliders } from "lucide-react";
+import { Github, Music, Video, Zap, ChevronRight, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import AudioConverterSection from "@/components/AudioConverterSection";
 import VideoExtractorSection from "@/components/VideoExtractorSection";
 import AudioToolsSection from "@/components/AudioToolsSection";
-import AudioEditorSection from "@/components/AudioEditorSection";
 import SettingsDialog from "@/components/SettingsDialog";
 import { useTranslation } from "@/lib/LanguageContext";
 
-type TabType = "audio" | "video" | "tools" | "editor";
+type TabType = "audio" | "video" | "tools";
 
 export default function AudioConvertor() {
     const [activeTab, setActiveTab] = useState<TabType>("audio");
@@ -21,7 +20,6 @@ export default function AudioConvertor() {
             case "audio": return { title: t.audioConverter.title, subtitle: t.audioConverter.subtitle };
             case "video": return { title: t.videoExtractor.title, subtitle: t.videoExtractor.subtitle };
             case "tools": return { title: t.tools.title, subtitle: t.tools.subtitle };
-            case "editor": return { title: t.editor.title, subtitle: t.editor.developing };
         }
     };
 
@@ -129,29 +127,6 @@ export default function AudioConvertor() {
                         </div>
                         {activeTab === "tools" && <ChevronRight className="w-4 h-4 text-emerald-400" />}
                     </button>
-
-                    {/* Editor Button */}
-                    <button
-                        onClick={() => setActiveTab("editor")}
-                        className={`
-              w-full flex items-center gap-4 px-4 py-4 rounded-xl text-left transition-all duration-200 group
-              ${activeTab === "editor"
-                                ? "bg-pink-500/10 text-pink-400 ring-1 ring-pink-500/20 shadow-lg shadow-pink-500/5"
-                                : "text-zinc-400 hover:bg-white/5 hover:text-white"}
-            `}
-                    >
-                        <div className={`
-              w-10 h-10 rounded-lg flex items-center justify-center transition-all
-              ${activeTab === "editor" ? "bg-pink-500 text-white" : "bg-zinc-800 text-zinc-500 group-hover:bg-zinc-700"}
-            `}>
-                            <Sliders className="w-5 h-5" />
-                        </div>
-                        <div className="flex-1">
-                            <span className="font-semibold block">{t.nav.editor}</span>
-                            <span className="text-xs text-zinc-500">{t.nav.editorDesc}</span>
-                        </div>
-                        {activeTab === "editor" && <ChevronRight className="w-4 h-4 text-pink-400" />}
-                    </button>
                 </nav>
 
                 {/* Sidebar Footer */}
@@ -186,7 +161,6 @@ export default function AudioConvertor() {
                         {activeTab === "audio" && <AudioConverterSection />}
                         {activeTab === "video" && <VideoExtractorSection />}
                         {activeTab === "tools" && <AudioToolsSection />}
-                        {activeTab === "editor" && <AudioEditorSection />}
                     </div>
                 </main>
 

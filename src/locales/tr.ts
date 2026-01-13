@@ -15,10 +15,8 @@ export default {
         audioConverterDesc: 'MP3, WAV, FLAC, M4A',
         videoToAudio: 'Video → Ses',
         videoToAudioDesc: 'MP4, MKV, AVI, WEBM',
-        tools: 'Araçlar',
+        tools: 'Düzenleme',
         toolsDesc: 'Kırpma, Birleştirme',
-        editor: 'Düzenleme',
-        editorDesc: 'Gelişmiş Editör',
     },
 
     // Audio Converter
@@ -61,8 +59,8 @@ export default {
 
     // Tools
     tools: {
-        title: 'Ses Araçları',
-        subtitle: 'Hızlı ses düzenleme araçları',
+        title: 'Ses Düzenleme',
+        subtitle: 'Kırpma, birleştirme ve daha fazlası',
         dropHint: 'Dosya sürükleyip bırakabilirsiniz',
         trim: 'Ses Kırpma',
         trimDesc: 'Ses dosyasının belirli bir bölümünü kes',
@@ -77,23 +75,6 @@ export default {
         howItWorksDesc: 'Bir araç seçin veya dosyayı sayfaya sürükleyin. Tüm işlemler tarayıcınızda gerçekleşir, dosyalarınız güvende!',
         dropAudio: 'Ses Dosyasını Bırakın',
         dropAudioDesc: 'Kırpma aracı ile düzenlenecek',
-    },
-
-    // Editor
-    editor: {
-        title: 'Ses Düzenleme Stüdyosu',
-        description: 'Profesyonel ses düzenleme araçları yakında burada olacak. Çoklu parça desteği, timeline editörü ve daha fazlası...',
-        developing: 'Geliştiriliyor',
-        multiTrack: 'Çoklu Parça Desteği',
-        multiTrackDesc: 'Birden fazla ses parçasını aynı anda düzenleyin',
-        timeline: 'Timeline Editörü',
-        timelineDesc: 'Zaman çizelgesi üzerinde hassas düzenleme',
-        effects: 'Ses Efektleri',
-        effectsDesc: 'Reverb, echo, fade ve daha fazlası',
-        equalizer: 'Equalizer',
-        equalizerDesc: 'Frekans bazlı ses ayarlama',
-        dropHint: 'Yakında!',
-        dropDesc: 'Editör özelliği henüz geliştiriliyor',
     },
 
     // Trim Dialog

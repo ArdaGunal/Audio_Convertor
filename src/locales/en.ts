@@ -15,10 +15,8 @@ export default {
         audioConverterDesc: 'MP3, WAV, FLAC, M4A',
         videoToAudio: 'Video → Audio',
         videoToAudioDesc: 'MP4, MKV, AVI, WEBM',
-        tools: 'Tools',
+        tools: 'Editing',
         toolsDesc: 'Trim, Merge',
-        editor: 'Editor',
-        editorDesc: 'Advanced Editor',
     },
 
     // Audio Converter
@@ -61,8 +59,8 @@ export default {
 
     // Tools
     tools: {
-        title: 'Audio Tools',
-        subtitle: 'Quick audio editing tools',
+        title: 'Audio Editing',
+        subtitle: 'Trim, merge and more',
         dropHint: 'You can drag and drop files',
         trim: 'Audio Trim',
         trimDesc: 'Cut a specific portion of the audio file',
@@ -77,23 +75,6 @@ export default {
         howItWorksDesc: 'Select a tool or drag a file to the page. All processing happens in your browser, your files are safe!',
         dropAudio: 'Drop Audio File',
         dropAudioDesc: 'Will be edited with the trim tool',
-    },
-
-    // Editor
-    editor: {
-        title: 'Audio Editing Studio',
-        description: 'Professional audio editing tools coming soon. Multi-track support, timeline editor, and more...',
-        developing: 'In Development',
-        multiTrack: 'Multi-Track Support',
-        multiTrackDesc: 'Edit multiple audio tracks simultaneously',
-        timeline: 'Timeline Editor',
-        timelineDesc: 'Precise editing on the timeline',
-        effects: 'Audio Effects',
-        effectsDesc: 'Reverb, echo, fade, and more',
-        equalizer: 'Equalizer',
-        equalizerDesc: 'Frequency-based audio adjustment',
-        dropHint: 'Coming Soon!',
-        dropDesc: 'Editor feature is still in development',
     },
 
     // Trim Dialog

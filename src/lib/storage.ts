@@ -2,9 +2,10 @@
 // Dosyaları tarayıcıda kalıcı olarak saklar
 
 const DB_NAME = 'AudioConvertorDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;  // Bumped for new editor store
 const AUDIO_STORE = 'audioFiles';
 const VIDEO_STORE = 'videoFiles';
+const EDITOR_STORE = 'editorFiles';
 
 export interface StoredFile {
     id: string;
@@ -39,14 +40,28 @@ function openDB(): Promise<IDBDatabase> {
             if (!db.objectStoreNames.contains(VIDEO_STORE)) {
                 db.createObjectStore(VIDEO_STORE, { keyPath: 'id' });
             }
+
+            // Create editor files store
+            if (!db.objectStoreNames.contains(EDITOR_STORE)) {
+                db.createObjectStore(EDITOR_STORE, { keyPath: 'id' });
+            }
         };
     });
 }
 
+// Helper to get store name
+function getStoreName(store: 'audio' | 'video' | 'editor'): string {
+    switch (store) {
+        case 'audio': return AUDIO_STORE;
+        case 'video': return VIDEO_STORE;
+        case 'editor': return EDITOR_STORE;
+    }
+}
+
 // Save file to IndexedDB
-export async function saveFileToStorage(file: StoredFile, store: 'audio' | 'video' = 'audio'): Promise<void> {
+export async function saveFileToStorage(file: StoredFile, store: 'audio' | 'video' | 'editor' = 'audio'): Promise<void> {
     const db = await openDB();
-    const storeName = store === 'audio' ? AUDIO_STORE : VIDEO_STORE;
+    const storeName = getStoreName(store);
 
     return new Promise((resolve, reject) => {
         const transaction = db.transaction(storeName, 'readwrite');
@@ -65,9 +80,9 @@ export async function saveFileToStorage(file: StoredFile, store: 'audio' | 'vide
 }
 
 // Load all files from IndexedDB
-export async function loadFilesFromStorage(store: 'audio' | 'video' = 'audio'): Promise<StoredFile[]> {
+export async function loadFilesFromStorage(store: 'audio' | 'video' | 'editor' = 'audio'): Promise<StoredFile[]> {
     const db = await openDB();
-    const storeName = store === 'audio' ? AUDIO_STORE : VIDEO_STORE;
+    const storeName = getStoreName(store);
 
     return new Promise((resolve, reject) => {
         const transaction = db.transaction(storeName, 'readonly');
@@ -86,9 +101,9 @@ export async function loadFilesFromStorage(store: 'audio' | 'video' = 'audio'): 
 }
 
 // Delete file from IndexedDB
-export async function deleteFileFromStorage(id: string, store: 'audio' | 'video' = 'audio'): Promise<void> {
+export async function deleteFileFromStorage(id: string, store: 'audio' | 'video' | 'editor' = 'audio'): Promise<void> {
     const db = await openDB();
-    const storeName = store === 'audio' ? AUDIO_STORE : VIDEO_STORE;
+    const storeName = getStoreName(store);
 
     return new Promise((resolve, reject) => {
         const transaction = db.transaction(storeName, 'readwrite');
@@ -103,9 +118,9 @@ export async function deleteFileFromStorage(id: string, store: 'audio' | 'video'
 }
 
 // Clear all files from IndexedDB
-export async function clearAllFilesFromStorage(store: 'audio' | 'video' = 'audio'): Promise<void> {
+export async function clearAllFilesFromStorage(store: 'audio' | 'video' | 'editor' = 'audio'): Promise<void> {
     const db = await openDB();
-    const storeName = store === 'audio' ? AUDIO_STORE : VIDEO_STORE;
+    const storeName = getStoreName(store);
 
     return new Promise((resolve, reject) => {
         const transaction = db.transaction(storeName, 'readwrite');
@@ -120,9 +135,9 @@ export async function clearAllFilesFromStorage(store: 'audio' | 'video' = 'audio
 }
 
 // Update file in IndexedDB
-export async function updateFileInStorage(id: string, updates: Partial<StoredFile>, store: 'audio' | 'video' = 'audio'): Promise<void> {
+export async function updateFileInStorage(id: string, updates: Partial<StoredFile>, store: 'audio' | 'video' | 'editor' = 'audio'): Promise<void> {
     const db = await openDB();
-    const storeName = store === 'audio' ? AUDIO_STORE : VIDEO_STORE;
+    const storeName = getStoreName(store);
 
     return new Promise((resolve, reject) => {
         const transaction = db.transaction(storeName, 'readwrite');

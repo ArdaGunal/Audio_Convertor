@@ -271,8 +271,8 @@ export default function AudioConverterSection() {
     };
 
     const downloadFile = (audioFile: AudioFile) => {
-        if (!audioFile.file) return;
         const blob = audioFile.convertedBlob || audioFile.file;
+        if (!blob) return;
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -291,8 +291,8 @@ export default function AudioConverterSection() {
             const JSZip = (await import('jszip')).default;
             const zip = new JSZip();
             for (const audioFile of completedFiles) {
-                if (audioFile.file) {
-                    const blob = audioFile.convertedBlob || audioFile.file;
+                const blob = audioFile.convertedBlob || audioFile.file;
+                if (blob) {
                     const fileName = getConvertedFileName(audioFile.name, audioFile.targetFormat);
                     zip.file(fileName, blob);
                 }
