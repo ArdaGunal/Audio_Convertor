@@ -36,6 +36,9 @@ import {
     formatAudioTime,
     getConvertedFileName,
 } from "@/lib/types";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { fetchFile, toBlobURL } from "@ffmpeg/util";
+
 
 export default function AudioConverterSection() {
     const [files, setFiles] = useState<AudioFile[]>([]);
@@ -46,14 +49,31 @@ export default function AudioConverterSection() {
     const [playingId, setPlayingId] = useState<string | null>(null);
     const [currentTime, setCurrentTime] = useState(0);
     const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+    const [ffmpegLoaded, setFfmpegLoaded] = useState(false);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const timerRef = useRef<NodeJS.Timeout | null>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    const ffmpegRef = useRef(new FFmpeg());
+    const messageRef = useRef<HTMLParagraphElement | null>(null);
+
+    const load = async () => {
+        const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
+        const ffmpeg = ffmpegRef.current;
+        ffmpeg.on("log", ({ message }) => {
+            console.log(message);
+        });
+
+        // toBlobURL is used to bypass CORS issue, urls are fetched to blob url then loaded
+        await ffmpeg.load({
+            coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+            wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+        });
+        setFfmpegLoaded(true);
+    };
 
     useEffect(() => {
+        load();
         return () => {
-            if (timerRef.current) clearInterval(timerRef.current);
             if (audioRef.current) {
                 audioRef.current.pause();
                 audioRef.current = null;
@@ -234,33 +254,71 @@ export default function AudioConverterSection() {
 
     const convertAll = async () => {
         if (files.length === 0 || isConverting) return;
+        if (!ffmpegLoaded) {
+            console.error("FFmpeg not loaded yet");
+            return;
+        }
+
         setIsConverting(true);
         setOverallProgress(0);
 
+        const ffmpeg = ffmpegRef.current;
         const waitingFiles = files.filter((f) => f.status === "waiting");
 
         for (let i = 0; i < waitingFiles.length; i++) {
             const file = waitingFiles[i];
+
             setFiles((prev) =>
                 prev.map((f) =>
                     f.id === file.id ? { ...f, status: "converting", progress: 0 } : f
                 )
             );
 
-            for (let progress = 0; progress <= 100; progress += 10) {
-                await new Promise((resolve) => setTimeout(resolve, 80));
+            try {
+                const inputName = `input.${file.originalFormat.toLowerCase()}`;
+                const outputName = `output.${file.targetFormat.toLowerCase()}`;
+
+                // Write file to FFmpeg FS
+                await ffmpeg.writeFile(inputName, await fetchFile(file.file ?? file.audioUrl!));
+
+                // Track progress
+                const onProgress = ({ progress }: { progress: number }) => {
+                    const percent = Math.round(progress * 100);
+                    setFiles((prev) =>
+                        prev.map((f) => (f.id === file.id ? { ...f, progress: percent } : f))
+                    );
+                };
+                ffmpeg.on('progress', onProgress);
+
+                // Run FFmpeg command
+                await ffmpeg.exec(['-i', inputName, outputName]);
+
+                // Read result
+                const data = await ffmpeg.readFile(outputName);
+                const blob = new Blob([(data as any)], { type: `audio/${file.targetFormat.toLowerCase()}` });
+                const url = URL.createObjectURL(blob);
+
                 setFiles((prev) =>
-                    prev.map((f) => (f.id === file.id ? { ...f, progress } : f))
+                    prev.map((f) =>
+                        f.id === file.id
+                            ? { ...f, status: "done", progress: 100, convertedBlob: blob, file: undefined, audioUrl: url } // Update audioUrl to the new file
+                            : f
+                    )
+                );
+
+                // Cleanup
+                await ffmpeg.deleteFile(inputName);
+                await ffmpeg.deleteFile(outputName);
+                ffmpeg.off('progress', onProgress);
+
+            } catch (error) {
+                console.error("Conversion error", error);
+                setFiles((prev) =>
+                    prev.map((f) =>
+                        f.id === file.id ? { ...f, status: "error", progress: 0 } : f
+                    )
                 );
             }
-
-            setFiles((prev) =>
-                prev.map((f) =>
-                    f.id === file.id
-                        ? { ...f, status: "done", progress: 100, convertedBlob: f.file }
-                        : f
-                )
-            );
 
             setOverallProgress(((i + 1) / waitingFiles.length) * 100);
         }
@@ -276,8 +334,8 @@ export default function AudioConverterSection() {
         return (
             <div
                 className={`w-full h-full flex flex-col items-center justify-center rounded-3xl border-2 border-dashed transition-all duration-300 relative overflow-hidden group ${isDragging
-                        ? "border-cyan-500/50 bg-cyan-500/5"
-                        : "border-white/5 bg-zinc-900/20 hover:border-white/10 hover:bg-zinc-900/40"
+                    ? "border-cyan-500/50 bg-cyan-500/5"
+                    : "border-white/5 bg-zinc-900/20 hover:border-white/10 hover:bg-zinc-900/40"
                     }`}
                 onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                 onDragLeave={() => setIsDragging(false)}
