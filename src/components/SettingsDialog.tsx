@@ -28,10 +28,20 @@ import {
     SelectTrigger,
     SelectValue
 } from "@/components/ui/select";
+import { useTranslation } from "@/lib/LanguageContext";
+import { clearAllFilesFromStorage } from "@/lib/storage";
 
 export default function SettingsDialog() {
-    const [language, setLanguage] = useState("tr");
+    const { t, language, setLanguage, languageNames } = useTranslation();
     const [theme, setTheme] = useState("dark");
+
+    const handleClearData = async () => {
+        if (confirm(language === 'tr' ? 'Tüm dosyalar silinecek. Emin misiniz?' : 'All files will be deleted. Are you sure?')) {
+            await clearAllFilesFromStorage('audio');
+            await clearAllFilesFromStorage('video');
+            window.location.reload();
+        }
+    };
 
     return (
         <Dialog>
@@ -44,10 +54,10 @@ export default function SettingsDialog() {
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2 text-xl">
                         <Settings className="w-5 h-5 text-cyan-400" />
-                        Ayarlar
+                        {t.settings.title}
                     </DialogTitle>
                     <DialogDescription className="text-white/40">
-                        AudioForge deneyiminizi özelleştirin.
+                        {t.settings.description}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -57,22 +67,18 @@ export default function SettingsDialog() {
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-white/70 flex items-center gap-2">
                             <Globe className="w-4 h-4 text-white/40" />
-                            Dil
+                            {t.settings.language}
                         </label>
-                        <div className="grid grid-cols-2 gap-2">
-                            <button
-                                onClick={() => setLanguage("tr")}
-                                className={`px-4 py-2 rounded-lg text-sm border transition-all ${language === 'tr' ? 'bg-cyan-500/10 border-cyan-500/50 text-cyan-400' : 'bg-zinc-900 border-white/5 text-white/40 hover:bg-white/5'}`}
-                            >
-                                Türkçe
-                            </button>
-                            <button
-                                onClick={() => setLanguage("en")}
-                                className={`px-4 py-2 rounded-lg text-sm border transition-all ${language === 'en' ? 'bg-cyan-500/10 border-cyan-500/50 text-cyan-400' : 'bg-zinc-900 border-white/5 text-white/40 hover:bg-white/5'}`}
-                            >
-                                English
-                            </button>
-                        </div>
+                        <Select value={language} onValueChange={(val) => setLanguage(val as any)}>
+                            <SelectTrigger className="w-full bg-zinc-900 border-white/10 text-white">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-zinc-900 border-white/10 text-white">
+                                {Object.entries(languageNames).map(([code, name]) => (
+                                    <SelectItem key={code} value={code}>{name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
 
                     <div className="h-px bg-white/5" />
@@ -81,15 +87,15 @@ export default function SettingsDialog() {
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-white/70 flex items-center gap-2">
                             <Laptop className="w-4 h-4 text-white/40" />
-                            Görünüm
+                            {t.settings.theme}
                         </label>
                         <Select value={theme} onValueChange={setTheme}>
                             <SelectTrigger className="w-full bg-zinc-900 border-white/10 text-white">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent className="bg-zinc-900 border-white/10 text-white">
-                                <SelectItem value="dark"><div className="flex items-center gap-2"><Moon className="w-4 h-4" /> Koyu Mod</div></SelectItem>
-                                <SelectItem value="system"><div className="flex items-center gap-2"><Laptop className="w-4 h-4" /> Sistem</div></SelectItem>
+                                <SelectItem value="dark"><div className="flex items-center gap-2"><Moon className="w-4 h-4" /> {t.settings.dark}</div></SelectItem>
+                                <SelectItem value="system"><div className="flex items-center gap-2"><Laptop className="w-4 h-4" /> {t.settings.system}</div></SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
@@ -99,11 +105,16 @@ export default function SettingsDialog() {
                     {/* Reset */}
                     <div className="flex items-center justify-between p-3 rounded-lg bg-red-500/5 border border-red-500/10">
                         <div className="text-sm text-red-200/60">
-                            Tüm verileri temizle
+                            {language === 'tr' ? 'Tüm verileri temizle' : 'Clear all data'}
                         </div>
-                        <Button variant="ghost" size="sm" className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-8">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-8"
+                            onClick={handleClearData}
+                        >
                             <RotateCcw className="w-3 h-3 mr-2" />
-                            Sıfırla
+                            {language === 'tr' ? 'Sıfırla' : 'Reset'}
                         </Button>
                     </div>
 
@@ -116,7 +127,7 @@ export default function SettingsDialog() {
                     </a>
                     <DialogClose asChild>
                         <Button type="button" variant="secondary" className="bg-white text-black hover:bg-white/90">
-                            Tamam
+                            {t.settings.close}
                         </Button>
                     </DialogClose>
                 </DialogFooter>

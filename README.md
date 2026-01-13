@@ -1,61 +1,134 @@
-# 🎵 AudioForge
+# 🎵 Audio Convertor
 
-**AudioForge**, modern web teknolojileri ile geliştirilmiş, şık ve güçlü bir ses dönüştürme ve video-ses ayrıştırma stüdyosudur. Tarayıcı tabanlı çalışır, gizliliğe önem verir ve dosyalarınızı sunucuya yüklemeden yerel olarak işler (Web Audio API).
+**Audio Convertor** is a modern, sleek, and powerful audio conversion and video-to-audio extraction studio built with cutting-edge web technologies. It runs entirely in your browser, respects your privacy, and processes files locally using FFmpeg.wasm - no server uploads required!
 
-![AudioForge Cover](https://images.unsplash.com/photo-1614149162883-504ce4d13909?q=80&w=2608&auto=format&fit=crop)
+![Audio Convertor Preview](https://images.unsplash.com/photo-1614149162883-504ce4d13909?q=80&w=2608&auto=format&fit=crop)
 
-## ✨ Özellikler
+## ✨ Features
 
-### 🎧 Ses Dönüştürücü
-*   **Format Desteği:** MP3, WAV, FLAC, M4A, OGG, AAC, WMA
-*   **Toplu Dönüştürme:** Birden fazla dosyayı aynı anda işleyin.
-*   **Anlık Önizleme:** Dönüştürmeden önce veya sonra dosyaları dinleyin.
-*   **Seek Bar:** Ses dosyaları üzerinde istediğiniz saniyeye atlayın.
-*   **ZIP İndirme:** Tüm dönüştürülen dosyaları tek tıkla ZIP olarak indirin.
+### 🎧 Audio Converter
+- **Format Support:** MP3, WAV, FLAC, M4A, OGG, AAC, WMA
+- **Batch Conversion:** Process multiple files simultaneously
+- **Instant Preview:** Listen to files before or after conversion
+- **Seek Bar:** Jump to any second in audio files
+- **ZIP Download:** Download all converted files as a single ZIP
 
-### 🎬 Video'dan Ses Çıkarıcı
-*   **Video Desteği:** MP4, MKV, AVI, WEBM, MOV
-*   **Hızlı Ayrıştırma:** Videolarınızdan yüksek kaliteli WAV/MP3 ses dosyaları oluşturun.
-*   **Sürükle & Bırak:** Büyük video dosyalarını kolayca arayüze bırakın.
+### 🎬 Video to Audio Extractor
+- **Video Support:** MP4, MKV, AVI, WEBM, MOV
+- **Fast Extraction:** Create high-quality WAV/MP3 audio from videos
+- **Drag & Drop:** Easily drop large video files into the interface
 
-### 🎨 Arayüz & Deneyim
-*   **Sinematik Tasarım:** Tam ekran, modern ve "karanlık mod" odaklı arayüz.
-*   **Dinamik Görünüm:** Liste veya Izgara (Grid) görünümü arasında geçiş yapın.
-*   **Glassmorphism:** Modern cam efektleri ve neon detaylar.
+### ✂️ Audio Tools
+- **Audio Trimming:** Cut specific portions of audio files
+- **More coming soon:** Audio merging, normalization, and more
 
-## 🛠️ Teknolojiler
+### 💾 Persistent Storage
+- Files are automatically saved to your browser's IndexedDB
+- Refresh the page? Your files are still there!
+- No account or cloud storage needed
 
-Bu proje aşağıdaki teknolojiler kullanılarak geliştirilmiştir:
+### 🎨 Interface & Experience
+- **Cinematic Design:** Full-screen, modern dark mode interface
+- **Dynamic Views:** Switch between List or Grid view
+- **Glassmorphism:** Modern glass effects and neon accents
 
-*   **[Next.js 14](https://nextjs.org/)** - React Framework (App Router)
-*   **[TypeScript](https://www.typescriptlang.org/)** - Tip güvenliği
-*   **[Tailwind CSS](https://tailwindcss.com/)** - Styling
-*   **[Shadcn/ui](https://ui.shadcn.com/)** - UI Bileşenleri
-*   **[Lucide React](https://lucide.dev/)** - İkon seti
-*   **Web Audio API** - Tarayıcı tabanlı ses işleme
+## 🛠️ Technologies
 
-## 🚀 Kurulum
+This project is built with:
 
-Projeyi kendi bilgisayarınızda çalıştırmak için:
+- **[Next.js 16](https://nextjs.org/)** - React Framework (App Router)
+- **[TypeScript](https://www.typescriptlang.org/)** - Type safety
+- **[Tailwind CSS](https://tailwindcss.com/)** - Styling
+- **[Shadcn/ui](https://ui.shadcn.com/)** - UI Components
+- **[FFmpeg.wasm](https://ffmpegwasm.netlify.app/)** - Browser-based audio/video processing
+- **[Lucide React](https://lucide.dev/)** - Icon set
 
-1.  **Repoyu klonlayın:**
-    ```bash
-    git clone https://github.com/ArdaGunal/Audio_Convertor.git
-    cd Audio_Convertor
-    ```
+## 🚀 Quick Start
 
-2.  **Bağımlılıkları yükleyin:**
-    ```bash
-    npm install
-    ```
+### Prerequisites
+- [Node.js](https://nodejs.org/) (v18 or higher)
+- npm or yarn
 
-3.  **Geliştirme sunucusunu başlatın:**
-    ```bash
-    npm run dev
-    ```
+### Installation
 
-4.  Tarayıcınızda `http://localhost:3000` (veya `3001`) adresine gidin.
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/ArdaGunal/Audio_Convertor.git
+   cd Audio_Convertor
+   ```
 
-## 📄 Lisans
+2. **Install dependencies:**
+   ```bash
+   npm install
+   ```
 
-Bu proje MIT lisansı ile lisanslanmıştır.
+3. **Start the development server:**
+   ```bash
+   npm run dev
+   ```
+
+4. Open your browser and navigate to `http://localhost:3000` (or `3001` if 3000 is in use)
+
+### Building for Production
+
+```bash
+npm run build
+npm start
+```
+
+## 🔧 Easy Setup Script (Windows)
+
+For Windows users, you can use the included batch file:
+
+1. Double-click `AudioForge Baslat.bat`
+2. The script will automatically start the development server
+3. Your browser will open with the application
+
+## 📁 Project Structure
+
+```
+Audio_Convertor/
+├── src/
+│   ├── app/              # Next.js app router pages
+│   ├── components/       # React components
+│   │   ├── AudioConverterSection.tsx
+│   │   ├── VideoExtractorSection.tsx
+│   │   ├── AudioToolsSection.tsx
+│   │   └── ...
+│   └── lib/              # Utilities and types
+│       ├── types.ts
+│       └── storage.ts    # IndexedDB persistence
+├── public/               # Static assets
+└── README.md
+```
+
+## 🌐 Browser Support
+
+Audio Convertor works best on modern browsers that support:
+- Web Audio API
+- IndexedDB
+- WebAssembly (for FFmpeg.wasm)
+
+**Recommended:** Chrome, Edge, Firefox (latest versions)
+
+## 🤝 Contributing
+
+Contributions are welcome! Feel free to:
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+## 👤 Author
+
+**Arda Günal**
+- GitHub: [@ArdaGunal](https://github.com/ArdaGunal)
+
+---
+
+⭐ If you find this project useful, please consider giving it a star!

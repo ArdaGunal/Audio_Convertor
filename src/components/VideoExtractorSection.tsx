@@ -321,196 +321,200 @@ export default function VideoExtractorSection() {
     const completedFilesCount = files.filter(f => f.status === 'done').length;
     const waitingFilesCount = files.filter(f => f.status === 'waiting').length;
 
-    if (files.length === 0) {
-        return (
-            <div
-                className={`w-full h-full flex flex-col items-center justify-center rounded-3xl border-2 border-dashed transition-all duration-300 relative overflow-hidden group ${isDragging
-                        ? "border-orange-500/50 bg-orange-500/5"
-                        : "border-white/5 bg-zinc-900/20 hover:border-white/10 hover:bg-zinc-900/40"
-                    }`}
-                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-            >
-                <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept={SUPPORTED_VIDEO_EXTENSIONS.join(",")}
-                    className="hidden"
-                    onChange={handleFileSelect}
-                />
-
-                <div className="absolute inset-0 pointer-events-none">
-                    <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-red-500/10 rounded-full blur-[150px] transition-opacity duration-700 ${isDragging ? "opacity-40" : "opacity-0 group-hover:opacity-20"}`} />
-                </div>
-
-                <div className="relative z-10 flex flex-col items-center text-center p-12">
-                    <div className={`mb-8 p-6 rounded-2xl bg-zinc-900 border border-white/10 shadow-2xl transition-all duration-300 ${isDragging ? "scale-110 border-orange-500/50 shadow-orange-500/20" : ""}`}>
-                        <Video className={`w-12 h-12 ${isDragging ? "text-orange-400" : "text-white/50"}`} />
-                    </div>
-
-                    <h2 className="text-4xl md:text-5xl font-bold text-white mb-4 tracking-tight">Video Extractor</h2>
-                    <p className="text-lg text-white/40 max-w-md mb-12">
-                        Video dosyalarınızdan yüksek kaliteli ses çıkarmak için dosyaları sürükleyin.
-                    </p>
-
-                    <Button
-                        size="lg"
-                        className="h-14 px-8 rounded-full text-base bg-white text-black hover:bg-white/90 hover:scale-105 transition-all"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            fileInputRef.current?.click();
-                        }}
-                    >
-                        <Plus className="w-5 h-5 mr-2" />
-                        Video Seçin
-                    </Button>
-
-                    <div className="mt-12 flex gap-4 text-xs font-mono text-white/20 uppercase tracking-widest">
-                        <span>MP4</span> • <span>MKV</span> • <span>MOV</span> • <span>WEBM</span> • <span>AVI</span>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
     return (
-        <div className="h-full flex flex-col gap-6"
+        <div className="h-full flex flex-col gap-4"
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
             onDrop={handleDrop}
         >
-            {/* Hidden Input for Drag & Drop support overlay */}
+            {/* Full Screen Drag Overlay */}
             {isDragging && (
                 <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center pointer-events-none">
                     <div className="text-center">
-                        <Upload className="w-24 h-24 text-orange-400 mx-auto mb-4 animate-bounce" />
-                        <h3 className="text-3xl font-bold text-white">Videoları Buraya Bırakın</h3>
+                        <Upload className="w-20 h-20 text-purple-400 mx-auto mb-4 animate-bounce" />
+                        <h3 className="text-2xl font-bold text-white">Videoları Buraya Bırakın</h3>
                     </div>
                 </div>
             )}
 
-            {/* Toolbar */}
-            <div className="flex items-center justify-between p-1">
-                <div className="flex items-center gap-4">
-                    <h2 className="text-2xl font-bold text-white">Video Listesi</h2>
-                    <div className="h-6 w-px bg-white/10" />
-                    <div className="flex items-center gap-1 bg-zinc-900 p-1 rounded-lg border border-white/5">
-                        <button onClick={() => setViewMode("list")} className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white'}`}>
+            {/* ===== TOP SECTION: Drop Zone + Toolbar (FIXED) ===== */}
+            <div className="shrink-0 flex items-stretch gap-4">
+
+                {/* Compact Drop Zone */}
+                <div
+                    className={`
+                        flex-1 flex items-center gap-4 p-4 rounded-xl border-2 border-dashed cursor-pointer transition-all duration-200
+                        ${isDragging
+                            ? "border-purple-500/50 bg-purple-500/10"
+                            : "border-zinc-800 bg-zinc-900/30 hover:border-zinc-700 hover:bg-zinc-900/50"}
+                    `}
+                    onClick={() => fileInputRef.current?.click()}
+                >
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        accept={SUPPORTED_VIDEO_EXTENSIONS.join(",")}
+                        className="hidden"
+                        onChange={handleFileSelect}
+                    />
+
+                    <div className={`p-3 rounded-xl transition-colors ${isDragging ? "bg-purple-500/20" : "bg-zinc-800"}`}>
+                        <Video className={`w-6 h-6 ${isDragging ? "text-purple-400" : "text-zinc-500"}`} />
+                    </div>
+
+                    <div className="flex-1">
+                        <p className="font-medium text-white">Video Ekle</p>
+                        <p className="text-sm text-zinc-500">Sürükle-bırak veya tıkla • MP4, MKV, WEBM, AVI</p>
+                    </div>
+
+                    <div className="text-sm text-zinc-600 font-medium px-3 py-1.5 bg-zinc-900 rounded-lg border border-white/5">
+                        {files.length} video
+                    </div>
+                </div>
+
+                {/* Toolbar Buttons */}
+                <div className="flex items-center gap-2 shrink-0">
+                    {/* View Mode Toggle */}
+                    <div className="flex items-center gap-1 bg-zinc-900 p-1.5 rounded-lg border border-white/5 h-full">
+                        <button
+                            onClick={() => setViewMode("list")}
+                            className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                        >
                             <ListIcon className="w-4 h-4" />
                         </button>
-                        <button onClick={() => setViewMode("grid")} className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white'}`}>
+                        <button
+                            onClick={() => setViewMode("grid")}
+                            className={`p-2 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                        >
                             <LayoutGrid className="w-4 h-4" />
                         </button>
                     </div>
-                    <span className="text-sm text-white/40">{files.length} video</span>
-                </div>
 
-                <div className="flex items-center gap-3">
-                    <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="border-white/10 bg-white/5 hover:bg-white/10 text-white">
-                        <Plus className="w-4 h-4 mr-2" /> Ekle
-                    </Button>
-                    <input ref={fileInputRef} type="file" multiple accept={SUPPORTED_VIDEO_EXTENSIONS.join(",")} className="hidden" onChange={handleFileSelect} />
-                    <Button onClick={extractAll} disabled={isExtracting || waitingFilesCount === 0} className="bg-orange-500 hover:bg-orange-400 text-black font-semibold px-6 min-w-[140px]">
-                        {isExtracting ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Çıkarılıyor</> : <><Scissors className="h-4 w-4 mr-2" />Ses Çıkar</>}
+                    <Button
+                        onClick={extractAll}
+                        disabled={isExtracting || waitingFilesCount === 0}
+                        className="h-full px-6 bg-purple-500 hover:bg-purple-400 text-white font-bold"
+                    >
+                        {isExtracting ? (
+                            <><Loader2 className="h-4 w-4 animate-spin mr-2" />Çıkarılıyor</>
+                        ) : (
+                            <><Scissors className="h-4 w-4 mr-2" />Ses Çıkar ({waitingFilesCount})</>
+                        )}
                     </Button>
                 </div>
             </div>
 
             {/* Progress Bar */}
             {(isExtracting || overallProgress > 0) && (
-                <div className="w-full bg-zinc-900 rounded-full h-1 overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-orange-500 to-red-600 transition-all duration-300" style={{ width: `${overallProgress}%` }} />
+                <div className="w-full bg-zinc-900 rounded-full h-1.5 overflow-hidden shrink-0">
+                    <div
+                        className="h-full bg-purple-500 transition-all duration-300"
+                        style={{ width: `${overallProgress}%` }}
+                    />
                 </div>
             )}
 
-            {/* Main Content */}
-            <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
-                <div className={viewMode === 'list' ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4'}>
-                    {files.map((file) => (
-                        viewMode === 'list' ? (
-                            // LIST VIEW
-                            <div key={file.id} className="group flex items-center gap-4 p-4 rounded-xl bg-zinc-900/50 border border-white/5 hover:bg-zinc-900 hover:border-white/10 transition-all">
-                                <div className="p-3 rounded-lg bg-white/5 text-orange-400">
-                                    <Video className="w-5 h-5" />
-                                </div>
-                                <div className="min-w-[200px]">
-                                    <h4 className="font-medium text-white truncate max-w-[250px]">{file.name}</h4>
-                                    <p className="text-xs text-white/40">{formatFileSize(file.size)} • {file.format}</p>
-                                </div>
-
-                                {/* Audio Player */}
-                                <div className="flex-1 flex items-center gap-3 px-4">
-                                    {file.status === 'done' && file.audioUrl ? (
-                                        <>
-                                            <button
-                                                onClick={() => playAudio(file)}
-                                                className={`w-8 h-8 flex items-center justify-center rounded-full transition-all ${playingId === file.id ? "bg-orange-500 text-black" : "bg-white/10 text-white hover:bg-white/20"}`}
-                                            >
-                                                {playingId === file.id ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3 ml-0.5" />}
-                                            </button>
-                                            <div className="flex-1 h-8 flex items-center group/seek cursor-pointer" onClick={(e) => seekAudio(file.id, e)}>
-                                                <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
-                                                    <div className="h-full bg-orange-500 transition-all" style={{ width: playingId === file.id && file.duration ? `${(currentTime / file.duration) * 100}%` : '0%' }} />
-                                                </div>
-                                            </div>
-                                            <span className="text-xs font-mono text-white/40 w-10 text-right">{formatAudioTime(file.duration || 0)}</span>
-                                        </>
-                                    ) : (
-                                        <div className="flex-1 text-center text-xs text-white/20 italic">
-                                            {file.status === 'extracting' ? 'Ses çıkarılıyor...' : 'Ses bekleniyor'}
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="flex items-center gap-3 border-l border-white/5 pl-3">
-                                    {file.status === 'done' && (
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-400 hover:bg-emerald-500/10" onClick={() => downloadAudio(file)}>
-                                            <Download className="w-4 h-4" />
-                                        </Button>
-                                    )}
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-white/20 hover:text-red-400 hover:bg-white/5" onClick={() => removeFile(file.id)}>
-                                        <Trash2 className="w-4 h-4" />
-                                    </Button>
-                                </div>
-                            </div>
-                        ) : (
-                            // GRID VIEW
-                            <div key={file.id} className="group relative p-4 rounded-2xl bg-zinc-900/50 border border-white/5 hover:bg-zinc-900 hover:border-white/10 hover:-translate-y-1 transition-all">
-                                <div className="flex justify-between items-start mb-4">
-                                    <div className="p-3 rounded-full bg-white/5 text-orange-400">
-                                        <Video className="w-6 h-6" />
-                                    </div>
-                                    <button className="p-1.5 text-white/20 hover:text-red-400 hover:bg-white/5 rounded transition-colors" onClick={() => removeFile(file.id)}>
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
-                                </div>
-                                <h4 className="font-semibold text-white truncate mb-1" title={file.name}>{file.name}</h4>
-                                <p className="text-xs text-white/40 mb-4">{formatFileSize(file.size)}</p>
-
-                                <div className="pt-3 border-t border-white/5">
-                                    {file.status === 'done' && file.audioUrl ? (
-                                        <div className="flex items-center gap-2">
-                                            <button className="w-8 h-8 rounded-full bg-orange-500 text-black flex items-center justify-center shrink-0 hover:scale-105 transition-transform" onClick={() => playAudio(file)}>
-                                                {playingId === file.id ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3 ml-0.5" />}
-                                            </button>
-                                            <button className="flex-1 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-white flex items-center justify-center gap-2 transition-colors" onClick={() => downloadAudio(file)}>
-                                                <Download className="w-3 h-3" /> İndir
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <div className="text-center text-xs text-orange-400 py-2">
-                                            {file.status === 'extracting' ? <span className="flex items-center justify-center gap-2"><Loader2 className="w-3 h-3 animate-spin" /> Çıkarılıyor</span> : 'Bekleniyor'}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )
-                    ))}
+            {/* ===== FILE LIST (SCROLLABLE) ===== */}
+            {files.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center text-zinc-600">
+                    <p>Henüz video eklenmedi. Yukarıdaki alana video sürükleyin veya tıklayın.</p>
                 </div>
-            </div>
+            ) : (
+                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+                    <div className={viewMode === 'list' ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3'}>
+                        {files.map((file) => (
+                            viewMode === 'list' ? (
+                                // LIST VIEW ITEM
+                                <div key={file.id} className="group flex items-center gap-4 p-4 rounded-xl bg-zinc-900/50 border border-white/5 hover:bg-zinc-900 hover:border-white/10 transition-all">
+                                    <div className="p-3 rounded-lg bg-zinc-950 border border-white/5 text-purple-500">
+                                        <Video className="w-5 h-5" />
+                                    </div>
+
+                                    <div className="w-[180px] shrink-0">
+                                        <h4 className="font-medium text-white truncate text-sm" title={file.name}>{file.name}</h4>
+                                        <p className="text-xs text-zinc-500">{formatFileSize(file.size)} • {file.format}</p>
+                                    </div>
+
+                                    {/* Player */}
+                                    <div className="flex-1 flex items-center gap-3 px-3 py-2 bg-zinc-950/50 rounded-lg border border-white/5">
+                                        {file.status === 'done' && file.audioUrl ? (
+                                            <>
+                                                <button
+                                                    onClick={() => playAudio(file)}
+                                                    className={`w-8 h-8 flex items-center justify-center rounded-full transition-all ${playingId === file.id ? "bg-purple-500 text-white" : "bg-zinc-800 text-white hover:bg-zinc-700"}`}
+                                                >
+                                                    {playingId === file.id ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3 ml-0.5" />}
+                                                </button>
+                                                <div className="flex-1 h-8 flex items-center cursor-pointer" onClick={(e) => seekAudio(file.id, e)}>
+                                                    <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
+                                                        <div className="h-full bg-purple-500" style={{ width: playingId === file.id && file.duration ? `${(currentTime / file.duration) * 100}%` : '0%' }} />
+                                                    </div>
+                                                </div>
+                                                <span className="text-xs font-mono text-zinc-500 w-10">{formatAudioTime(file.duration || 0)}</span>
+                                            </>
+                                        ) : (
+                                            <div className="flex-1 text-center text-xs text-zinc-500 italic">
+                                                {file.status === 'extracting' ? 'Ses çıkarılıyor...' : 'Bekliyor'}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Status & Actions */}
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-20 text-center">
+                                            {file.status === 'extracting' && <Loader2 className="w-4 h-4 text-purple-400 animate-spin mx-auto" />}
+                                            {file.status === 'done' && <CheckCircle className="w-4 h-4 text-emerald-400 mx-auto" />}
+                                            {file.status === 'error' && <span className="text-xs text-red-400">Hata</span>}
+                                            {file.status === 'waiting' && <span className="text-xs text-zinc-600">Bekliyor</span>}
+                                        </div>
+
+                                        {file.status === 'done' && (
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-400 hover:bg-emerald-500/10" onClick={() => downloadAudio(file)}>
+                                                <Download className="w-4 h-4" />
+                                            </Button>
+                                        )}
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-red-400 hover:bg-red-500/10" onClick={() => removeFile(file.id)}>
+                                            <Trash2 className="w-4 h-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            ) : (
+                                // GRID VIEW ITEM
+                                <div key={file.id} className="group p-4 rounded-xl bg-zinc-900/50 border border-white/5 hover:bg-zinc-900 hover:border-white/10 transition-all">
+                                    <div className="flex justify-between items-start mb-3">
+                                        <div className="p-2.5 rounded-lg bg-zinc-950 text-purple-500">
+                                            <Video className="w-5 h-5" />
+                                        </div>
+                                        <button className="p-1.5 text-zinc-500 hover:text-red-400 rounded transition-colors" onClick={() => removeFile(file.id)}>
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                    <h4 className="font-medium text-white truncate text-sm mb-1" title={file.name}>{file.name}</h4>
+                                    <p className="text-xs text-zinc-500 mb-3">{formatFileSize(file.size)}</p>
+                                    <div className="flex items-center gap-2 pt-3 border-t border-white/5">
+                                        {file.status === 'done' && file.audioUrl ? (
+                                            <>
+                                                <button
+                                                    onClick={() => playAudio(file)}
+                                                    className={`w-8 h-8 flex items-center justify-center rounded-full transition-all ${playingId === file.id ? "bg-purple-500 text-white" : "bg-zinc-800 text-white hover:bg-zinc-700"}`}
+                                                >
+                                                    {playingId === file.id ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3 ml-0.5" />}
+                                                </button>
+                                                <button className="flex-1 text-xs text-emerald-400 hover:underline text-right" onClick={() => downloadAudio(file)}>İndir</button>
+                                            </>
+                                        ) : (
+                                            <div className="flex-1 text-center text-xs">
+                                                {file.status === 'extracting' ? <span className="text-purple-400">Çıkarılıyor...</span> : <span className="text-zinc-600">Bekliyor</span>}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

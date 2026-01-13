@@ -16,8 +16,10 @@ import {
     Music,
     Plus,
     LayoutGrid,
-    List as ListIcon
+    List as ListIcon,
+    Scissors
 } from "lucide-react";
+import AudioTrimDialog from "./AudioTrimDialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -36,8 +38,16 @@ import {
     formatAudioTime,
     getConvertedFileName,
 } from "@/lib/types";
+import {
+    saveFileToStorage,
+    loadFilesFromStorage,
+    deleteFileFromStorage,
+    updateFileInStorage,
+    StoredFile
+} from "@/lib/storage";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
+import { useTranslation } from "@/lib/LanguageContext";
 
 
 export default function AudioConverterSection() {
@@ -50,6 +60,9 @@ export default function AudioConverterSection() {
     const [currentTime, setCurrentTime] = useState(0);
     const [viewMode, setViewMode] = useState<"list" | "grid">("list");
     const [ffmpegLoaded, setFfmpegLoaded] = useState(false);
+    const [trimDialogOpen, setTrimDialogOpen] = useState(false);
+    const [trimTargetFile, setTrimTargetFile] = useState<AudioFile | null>(null);
+    const { t } = useTranslation();
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -74,6 +87,24 @@ export default function AudioConverterSection() {
 
     useEffect(() => {
         load();
+
+        // Load saved files from IndexedDB
+        loadFilesFromStorage('audio').then(async (storedFiles) => {
+            const restoredFiles: AudioFile[] = storedFiles.map((sf) => ({
+                id: sf.id,
+                name: sf.name,
+                size: sf.size,
+                originalFormat: sf.originalFormat,
+                targetFormat: sf.targetFormat,
+                status: sf.status === 'converting' ? 'waiting' : sf.status, // Reset converting state
+                progress: sf.status === 'done' ? 100 : 0,
+                duration: sf.duration,
+                audioUrl: sf.blob ? URL.createObjectURL(sf.blob) : undefined,
+                convertedBlob: sf.blob,
+            }));
+            setFiles(restoredFiles);
+        }).catch(console.error);
+
         return () => {
             if (audioRef.current) {
                 audioRef.current.pause();
@@ -95,20 +126,16 @@ export default function AudioConverterSection() {
         addFiles(droppedFiles);
     }, []);
 
-    const addFiles = (newFiles: File[]) => {
-        const audioFiles: AudioFile[] = newFiles.map((file) => {
+    const addFiles = async (newFiles: File[]) => {
+        const audioFiles: AudioFile[] = [];
+
+        for (const file of newFiles) {
             const ext = file.name.split(".").pop()?.toUpperCase() || "MP3";
             const audioUrl = URL.createObjectURL(file);
+            const id = generateId();
 
-            const audio = new Audio(audioUrl);
-            audio.onloadedmetadata = () => {
-                setFiles(prev => prev.map(f =>
-                    f.audioUrl === audioUrl ? { ...f, duration: audio.duration } : f
-                ));
-            };
-
-            return {
-                id: generateId(),
+            const audioFile: AudioFile = {
+                id,
                 name: file.name,
                 size: file.size,
                 originalFormat: ext,
@@ -119,7 +146,36 @@ export default function AudioConverterSection() {
                 audioUrl: audioUrl,
                 duration: 0,
             };
-        });
+
+            audioFiles.push(audioFile);
+
+            // Save to IndexedDB
+            try {
+                await saveFileToStorage({
+                    id,
+                    name: file.name,
+                    size: file.size,
+                    originalFormat: ext,
+                    targetFormat: "MP3",
+                    status: "waiting",
+                    progress: 0,
+                    blob: file,
+                    timestamp: Date.now(),
+                }, 'audio');
+            } catch (e) {
+                console.error('Failed to save to IndexedDB:', e);
+            }
+
+            // Get duration async
+            const audio = new Audio(audioUrl);
+            audio.onloadedmetadata = () => {
+                setFiles(prev => prev.map(f =>
+                    f.id === id ? { ...f, duration: audio.duration } : f
+                ));
+                // Update duration in storage
+                updateFileInStorage(id, { duration: audio.duration }, 'audio').catch(console.error);
+            };
+        }
 
         setFiles((prev) => [...prev, ...audioFiles]);
     };
@@ -140,12 +196,16 @@ export default function AudioConverterSection() {
         if (file?.audioUrl) URL.revokeObjectURL(file.audioUrl);
         if (playingId === id) stopAudio();
         setFiles((prev) => prev.filter((f) => f.id !== id));
+        // Remove from IndexedDB
+        deleteFileFromStorage(id, 'audio').catch(console.error);
     };
 
     const updateTargetFormat = (id: string, format: string) => {
         setFiles((prev) =>
             prev.map((f) => (f.id === id ? { ...f, targetFormat: format } : f))
         );
+        // Update in storage
+        updateFileInStorage(id, { targetFormat: format }, 'audio').catch(console.error);
     };
 
     const playAudio = (audioFile: AudioFile) => {
@@ -241,7 +301,7 @@ export default function AudioConverterSection() {
             const url = URL.createObjectURL(zipBlob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'AudioForge_Converted.zip';
+            a.download = 'Audio Convertor_Converted.zip';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -250,6 +310,76 @@ export default function AudioConverterSection() {
             console.error('ZIP hatası:', error);
         } finally {
             setIsDownloadingAll(false);
+        }
+    };
+
+    // Open trim dialog for a specific file
+    const openTrimDialog = (file: AudioFile) => {
+        setTrimTargetFile(file);
+        setTrimDialogOpen(true);
+    };
+
+    // Trim audio using FFmpeg
+    const trimAudio = async (fileId: string, startTime: number, endTime: number) => {
+        if (!ffmpegLoaded || !ffmpegRef.current) {
+            console.error("FFmpeg not loaded yet");
+            return;
+        }
+
+        const file = files.find(f => f.id === fileId);
+        if (!file) return;
+
+        const ffmpeg = ffmpegRef.current;
+        const ext = file.originalFormat.toLowerCase();
+        const inputName = `input.${ext}`;
+        const outputName = `trimmed.${ext}`;
+
+        try {
+            // Write file to FFmpeg FS
+            const fileData = file.convertedBlob || file.file;
+            if (fileData) {
+                await ffmpeg.writeFile(inputName, await fetchFile(fileData));
+            } else if (file.audioUrl) {
+                await ffmpeg.writeFile(inputName, await fetchFile(file.audioUrl));
+            }
+
+            // Run FFmpeg trim command
+            await ffmpeg.exec([
+                '-i', inputName,
+                '-ss', startTime.toString(),
+                '-to', endTime.toString(),
+                '-c', 'copy',
+                outputName
+            ]);
+
+            // Read result
+            const data = await ffmpeg.readFile(outputName);
+            const blob = new Blob([(data as any)], { type: `audio/${ext}` });
+            const newUrl = URL.createObjectURL(blob);
+
+            // Update file in state
+            if (file.audioUrl) URL.revokeObjectURL(file.audioUrl);
+
+            setFiles(prev => prev.map(f =>
+                f.id === fileId
+                    ? {
+                        ...f,
+                        audioUrl: newUrl,
+                        convertedBlob: blob,
+                        duration: endTime - startTime,
+                        file: undefined
+                    }
+                    : f
+            ));
+
+            // Cleanup
+            await ffmpeg.deleteFile(inputName);
+            await ffmpeg.deleteFile(outputName);
+
+            console.log(`Trimmed ${file.name}: ${startTime}s - ${endTime}s`);
+        } catch (error) {
+            console.error("Trim error:", error);
+            throw error;
         }
     };
 
@@ -307,6 +437,14 @@ export default function AudioConverterSection() {
                     )
                 );
 
+                // Save converted file to IndexedDB
+                updateFileInStorage(file.id, {
+                    status: "done",
+                    progress: 100,
+                    blob: blob,
+                    targetFormat: file.targetFormat
+                }, 'audio').catch(console.error);
+
                 // Cleanup
                 await ffmpeg.deleteFile(inputName);
                 await ffmpeg.deleteFile(outputName);
@@ -327,114 +465,48 @@ export default function AudioConverterSection() {
         setIsConverting(false);
     };
 
+    const handleClearAll = async () => {
+        if (confirm(t.audioConverter.confirmClearAll)) {
+            for (const file of files) {
+                await deleteFileFromStorage(file.id);
+            }
+            setFiles([]);
+            setOverallProgress(0);
+        }
+    };
+
     const completedFilesCount = files.filter(f => f.status === 'done').length;
     const waitingFilesCount = files.filter(f => f.status === 'waiting').length;
 
-    // --- EMPTY STATE ---
-    if (files.length === 0) {
-        return (
-            <div
-                className={`w-full h-full flex flex-col items-center justify-center rounded-3xl border-2 border-dashed transition-all duration-300 relative overflow-hidden group ${isDragging
-                    ? "border-cyan-500/50 bg-cyan-500/5"
-                    : "border-white/5 bg-zinc-900/20 hover:border-white/10 hover:bg-zinc-900/40"
-                    }`}
-                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-            >
-                <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept={SUPPORTED_AUDIO_EXTENSIONS.join(",")}
-                    className="hidden"
-                    onChange={handleFileSelect}
-                />
-
-                {/* Cinematic Background Elements */}
-                <div className="absolute inset-0 pointer-events-none">
-                    <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-cyan-500/20 rounded-full blur-[150px] transition-opacity duration-700 ${isDragging ? "opacity-40" : "opacity-0 group-hover:opacity-20"}`} />
-                </div>
-
-                <div className="relative z-10 flex flex-col items-center text-center p-12">
-                    <div className={`mb-8 p-6 rounded-2xl bg-zinc-900 border border-white/10 shadow-2xl transition-all duration-300 ${isDragging ? "scale-110 border-cyan-500/50 shadow-cyan-500/20" : ""}`}>
-                        <Upload className={`w-12 h-12 ${isDragging ? "text-cyan-400" : "text-white/50"}`} />
-                    </div>
-
-                    <h2 className="text-4xl md:text-5xl font-bold text-white mb-4 tracking-tight">Audio Studio</h2>
-                    <p className="text-lg text-white/40 max-w-md mb-12">
-                        Ses dosyalarınızı sürükleyip bırakarak profesyonel dönüştürme stüdyosunu başlatın.
-                    </p>
-
-                    <Button
-                        size="lg"
-                        className="h-14 px-8 rounded-full text-base bg-white text-black hover:bg-white/90 hover:scale-105 transition-all"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            fileInputRef.current?.click();
-                        }}
-                    >
-                        <Plus className="w-5 h-5 mr-2" />
-                        Dosya Seçin
-                    </Button>
-
-                    <div className="mt-12 flex gap-4 text-xs font-mono text-white/20 uppercase tracking-widest">
-                        <span>MP3</span> • <span>WAV</span> • <span>FLAC</span> • <span>M4A</span> • <span>OGG</span>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    // --- ACTIVE DASHBOARD STATE ---
     return (
-        <div className="h-full flex flex-col gap-6"
+        <div className="h-full flex flex-col gap-4"
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
             onDrop={handleDrop}
         >
-            {/* Hidden Input for Drag & Drop support overlay */}
+            {/* Full Screen Drag Overlay */}
             {isDragging && (
                 <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center pointer-events-none">
                     <div className="text-center">
-                        <Upload className="w-24 h-24 text-cyan-400 mx-auto mb-4 animate-bounce" />
-                        <h3 className="text-3xl font-bold text-white">Dosyaları Buraya Bırakın</h3>
+                        <Upload className="w-20 h-20 text-cyan-400 mx-auto mb-4 animate-bounce" />
+                        <h3 className="text-2xl font-bold text-white">Dosyaları Buraya Bırakın</h3>
                     </div>
                 </div>
             )}
 
-            {/* Dashboard Toolbar */}
-            <div className="flex items-center justify-between p-1">
-                <div className="flex items-center gap-4">
-                    <h2 className="text-2xl font-bold text-white">Dosya Listesi</h2>
-                    <div className="h-6 w-px bg-white/10" />
-                    <div className="flex items-center gap-1 bg-zinc-900 p-1 rounded-lg border border-white/5">
-                        <button
-                            onClick={() => setViewMode("list")}
-                            className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white'}`}
-                        >
-                            <ListIcon className="w-4 h-4" />
-                        </button>
-                        <button
-                            onClick={() => setViewMode("grid")}
-                            className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white'}`}
-                        >
-                            <LayoutGrid className="w-4 h-4" />
-                        </button>
-                    </div>
-                    <span className="text-sm text-white/40">{files.length} dosya</span>
-                </div>
+            {/* ===== TOP SECTION: Drop Zone + Toolbar (FIXED) ===== */}
+            <div className="shrink-0 flex items-stretch gap-6 mb-8">
 
-                <div className="flex items-center gap-3">
-                    <Button
-                        variant="outline"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="border-white/10 bg-white/5 hover:bg-white/10 text-white"
-                    >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Ekle
-                    </Button>
+                {/* Compact Drop Zone */}
+                <div
+                    className={`
+                        flex-1 flex items-center gap-4 p-4 rounded-xl border-2 border-dashed cursor-pointer transition-all duration-200
+                        ${isDragging
+                            ? "border-cyan-500/50 bg-cyan-500/10"
+                            : "border-zinc-800 bg-zinc-900/30 hover:border-zinc-700 hover:bg-zinc-900/50"}
+                    `}
+                    onClick={() => fileInputRef.current?.click()}
+                >
                     <input
                         ref={fileInputRef}
                         type="file"
@@ -444,150 +516,207 @@ export default function AudioConverterSection() {
                         onChange={handleFileSelect}
                     />
 
-                    {completedFilesCount > 0 && (
-                        <Button
-                            variant="ghost"
-                            onClick={downloadAllAsZip}
-                            disabled={isDownloadingAll}
-                            className="text-white/60 hover:text-white"
-                        >
-                            {isDownloadingAll ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Archive className="h-4 w-4 mr-2" />}
-                            ZIP
-                        </Button>
-                    )}
+                    <div className={`p-3 rounded-xl transition-colors ${isDragging ? "bg-cyan-500/20" : "bg-zinc-800"}`}>
+                        <Upload className={`w-6 h-6 ${isDragging ? "text-cyan-400" : "text-zinc-500"}`} />
+                    </div>
 
-                    <Button
-                        onClick={convertAll}
-                        disabled={isConverting || waitingFilesCount === 0}
-                        className="bg-cyan-500 hover:bg-cyan-400 text-black font-semibold px-6 min-w-[140px]"
-                    >
-                        {isConverting ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />İşleniyor</> : <><Zap className="h-4 w-4 mr-2" />Çevir</>}
-                    </Button>
+                    <div className="flex-1">
+                        <p className="font-medium text-white">{t.audioConverter.addFiles}</p>
+                        <p className="text-sm text-zinc-500">{t.audioConverter.dropHint} • {t.audioConverter.formats}</p>
+                    </div>
+
+                    <div className="text-sm text-zinc-600 font-medium px-3 py-1.5 bg-zinc-900 rounded-lg border border-white/5">
+                        {files.length} {t.audioConverter.files}
+                    </div>
+                </div>
+
+                {/* Toolbar Buttons */}
+                <div className="flex items-center gap-2 shrink-0">
+                    {/* View Mode Toggle */}
+                    <div className="flex items-center gap-1 bg-zinc-900 p-1.5 rounded-lg border border-white/5 h-full">
+                        <button
+                            onClick={() => setViewMode("list")}
+                            className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                        >
+                            <ListIcon className="w-4 h-4" />
+                        </button>
+                        <button
+                            onClick={() => setViewMode("grid")}
+                            className={`p-2 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                        >
+                            <LayoutGrid className="w-4 h-4" />
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            {/* Progress Bar (Full Width) */}
+            {/* Progress Bar */}
             {(isConverting || overallProgress > 0) && (
-                <div className="w-full bg-zinc-900 rounded-full h-1 overflow-hidden">
+                <div className="w-full bg-zinc-900 rounded-full h-1.5 overflow-hidden shrink-0">
                     <div
-                        className="h-full bg-gradient-to-r from-cyan-500 to-purple-600 transition-all duration-300"
+                        className="h-full bg-cyan-500 transition-all duration-300"
                         style={{ width: `${overallProgress}%` }}
                     />
                 </div>
             )}
 
-            {/* Main Content Area - Scrollable */}
-            <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
-                <div className={viewMode === 'list' ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4'}>
-                    {files.map((file) => (
-                        viewMode === 'list' ? (
-                            // LIST VIEW ITEM
-                            <div key={file.id} className="group flex items-center gap-4 p-4 rounded-xl bg-zinc-900/50 border border-white/5 hover:bg-zinc-900 hover:border-white/10 transition-all">
-                                <div className="p-3 rounded-lg bg-white/5 text-cyan-400">
-                                    <FileAudio className="w-5 h-5" />
-                                </div>
+            {/* ===== FILE LIST (SCROLLABLE) ===== */}
+            {files.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center text-zinc-600">
+                    <p>{t.audioConverter.noFiles}</p>
+                </div>
+            ) : (
+                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+                    <div className={viewMode === 'list' ? 'space-y-3' : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4'}>
+                        {files.map((file) => (
+                            viewMode === 'list' ? (
+                                // LIST VIEW ITEM
+                                <div key={file.id} className="group flex items-center gap-6 p-5 rounded-2xl bg-zinc-900/50 border border-white/5 hover:bg-zinc-900 hover:border-white/10 transition-all hover:shadow-xl hover:shadow-cyan-500/5 hover:-translate-y-0.5">
+                                    <div className="p-3 rounded-lg bg-zinc-950 border border-white/5 text-cyan-500">
+                                        <FileAudio className="w-5 h-5" />
+                                    </div>
 
-                                <div className="min-w-[200px]">
-                                    <h4 className="font-medium text-white truncate max-w-[250px]">{file.name}</h4>
-                                    <p className="text-xs text-white/40">{formatFileSize(file.size)}</p>
-                                </div>
+                                    <div className="w-[180px] shrink-0">
+                                        <h4 className="font-medium text-white truncate text-sm" title={file.name}>{file.name}</h4>
+                                        <p className="text-xs text-zinc-500">{formatFileSize(file.size)} • {file.originalFormat}</p>
+                                    </div>
 
-                                {/* Audio Controls */}
-                                <div className="flex-1 flex items-center gap-3 px-4">
-                                    <button
-                                        onClick={() => playAudio(file)}
-                                        className={`w-8 h-8 flex items-center justify-center rounded-full transition-all ${playingId === file.id ? "bg-cyan-500 text-black" : "bg-white/10 text-white hover:bg-white/20"}`}
-                                    >
-                                        {playingId === file.id ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3 ml-0.5" />}
-                                    </button>
-                                    <div className="flex-1 h-8 flex items-center group/seek cursor-pointer" onClick={(e) => seekAudio(file.id, e)}>
-                                        <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
-                                            <div className="h-full bg-cyan-500 transition-all" style={{ width: playingId === file.id && file.duration ? `${(currentTime / file.duration) * 100}%` : '0%' }} />
+                                    {/* Player */}
+                                    <div className="flex-1 flex items-center gap-3 px-3 py-2 bg-zinc-950/50 rounded-lg border border-white/5">
+                                        <button
+                                            onClick={() => playAudio(file)}
+                                            className={`w-8 h-8 flex items-center justify-center rounded-full transition-all ${playingId === file.id ? "bg-cyan-500 text-black" : "bg-zinc-800 text-white hover:bg-zinc-700"}`}
+                                        >
+                                            {playingId === file.id ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3 ml-0.5" />}
+                                        </button>
+                                        <div className="flex-1 h-8 flex items-center cursor-pointer" onClick={(e) => seekAudio(file.id, e)}>
+                                            <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
+                                                <div className="h-full bg-cyan-500" style={{ width: playingId === file.id && file.duration ? `${(currentTime / file.duration) * 100}%` : '0%' }} />
+                                            </div>
                                         </div>
-                                    </div>
-                                    <span className="text-xs font-mono text-white/40 w-10 text-right">{formatAudioTime(file.duration || 0)}</span>
-                                </div>
-
-                                <div className="flex items-center gap-3">
-                                    <Select value={file.targetFormat} onValueChange={(value) => updateTargetFormat(file.id, value)} disabled={file.status !== "waiting"}>
-                                        <SelectTrigger className="w-20 h-8 text-xs bg-black/20 border-white/10">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {SUPPORTED_AUDIO_FORMATS.filter((f) => f !== file.originalFormat).map((format) => (
-                                                <SelectItem key={format} value={format}>{format}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-
-                                    <div className="w-24 flex justify-center">
-                                        {file.status === 'converting' && <Loader2 className="w-4 h-4 text-cyan-400 animate-spin" />}
-                                        {file.status === 'done' && <CheckCircle className="w-4 h-4 text-emerald-400" />}
-                                        {file.status === 'waiting' && <span className="text-xs text-white/20">Hazır</span>}
+                                        <span className="text-xs font-mono text-zinc-500 w-10">{formatAudioTime(file.duration || 0)}</span>
                                     </div>
 
-                                    <div className="flex items-center gap-2 border-l border-white/5 pl-3">
+                                    {/* Format & Status */}
+                                    <div className="flex items-center gap-2">
+                                        <Select value={file.targetFormat} onValueChange={(value) => updateTargetFormat(file.id, value)} disabled={file.status !== "waiting"}>
+                                            <SelectTrigger className="w-20 h-8 text-xs bg-zinc-900 border-white/5">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {SUPPORTED_AUDIO_FORMATS.filter((f) => f !== file.originalFormat).map((format) => (
+                                                    <SelectItem key={format} value={format}>{format}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+
+                                        <div className="w-20 text-center">
+                                            {file.status === 'converting' && <Loader2 className="w-4 h-4 text-cyan-400 animate-spin mx-auto" />}
+                                            {file.status === 'done' && <CheckCircle className="w-4 h-4 text-emerald-400 mx-auto" />}
+                                            {file.status === 'error' && <span className="text-xs text-red-400">Hata</span>}
+                                            {file.status === 'waiting' && <span className="text-xs text-zinc-600">Bekliyor</span>}
+                                        </div>
+
                                         {file.status === 'done' && (
                                             <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-400 hover:bg-emerald-500/10" onClick={() => downloadFile(file)}>
                                                 <Download className="w-4 h-4" />
                                             </Button>
                                         )}
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-white/20 hover:text-red-400 hover:bg-white/5" onClick={() => removeFile(file.id)}>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-cyan-400 hover:bg-cyan-500/10" onClick={() => openTrimDialog(file)} title="Ses Kırp">
+                                            <Scissors className="w-4 h-4" />
+                                        </Button>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-red-400 hover:bg-red-500/10" onClick={() => removeFile(file.id)}>
                                             <Trash2 className="w-4 h-4" />
                                         </Button>
                                     </div>
                                 </div>
-                            </div>
-                        ) : (
-                            // GRID VIEW ITEM
-                            <div key={file.id} className="group relative p-4 rounded-2xl bg-zinc-900/50 border border-white/5 hover:bg-zinc-900 hover:border-white/10 hover:-translate-y-1 transition-all duration-300">
-                                <div className="flex justify-between items-start mb-4">
-                                    <div className="p-3 rounded-full bg-white/5 text-cyan-400 group-hover:bg-cyan-500/10 transition-colors">
-                                        <Music className="w-6 h-6" />
-                                    </div>
-                                    <div className="flex gap-1">
-                                        {/* Mini Actions */}
-                                        {file.status === 'done' && (
-                                            <button className="p-1.5 text-emerald-400 hover:bg-emerald-500/10 rounded transition-colors" onClick={() => downloadFile(file)}>
-                                                <Download className="w-4 h-4" />
-                                            </button>
-                                        )}
-                                        <button className="p-1.5 text-white/20 hover:text-red-400 hover:bg-white/5 rounded transition-colors" onClick={() => removeFile(file.id)}>
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <h4 className="font-semibold text-white truncate mb-1" title={file.name}>{file.name}</h4>
-                                <div className="flex justify-between items-center text-xs text-white/40 mb-4">
-                                    <span>{formatFileSize(file.size)}</span>
-                                    <span>{file.originalFormat} → {file.targetFormat}</span>
-                                </div>
-
-                                <div className="flex items-center gap-3 pt-3 border-t border-white/5">
-                                    <button
-                                        onClick={() => playAudio(file)}
-                                        className={`w-8 h-8 flex items-center justify-center rounded-full transition-all ${playingId === file.id ? "bg-cyan-500 text-black" : "bg-white/10 text-white hover:bg-white/20"}`}
-                                    >
-                                        {playingId === file.id ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3 ml-0.5" />}
-                                    </button>
-
-                                    {file.status === 'converting' ? (
-                                        <div className="flex-1 flex items-center gap-2 text-cyan-400 text-xs">
-                                            <Loader2 className="w-3 h-3 animate-spin" />
-                                            <span>%{file.progress}</span>
+                            ) : (
+                                // GRID VIEW ITEM
+                                <div key={file.id} className="group p-4 rounded-xl bg-zinc-900/50 border border-white/5 hover:bg-zinc-900 hover:border-white/10 transition-all">
+                                    <div className="flex justify-between items-start mb-3">
+                                        <div className="p-2.5 rounded-lg bg-zinc-950 text-cyan-500">
+                                            <Music className="w-5 h-5" />
                                         </div>
-                                    ) : file.status === 'done' ? (
-                                        <div className="flex-1 text-right text-emerald-400 text-xs font-medium">Tamamlandı</div>
-                                    ) : (
-                                        <div className="flex-1 h-1 bg-white/10 rounded-full" />
-                                    )}
+                                        <div className="flex gap-1">
+                                            <button className="p-1.5 text-cyan-400 hover:bg-cyan-500/10 rounded transition-colors" onClick={() => openTrimDialog(file)} title="Ses Kırp">
+                                                <Scissors className="w-4 h-4" />
+                                            </button>
+                                            <button className="p-1.5 text-zinc-500 hover:text-red-400 rounded transition-colors" onClick={() => removeFile(file.id)}>
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <h4 className="font-medium text-white truncate text-sm mb-1" title={file.name}>{file.name}</h4>
+                                    <p className="text-xs text-zinc-500 mb-3">{formatFileSize(file.size)} • {file.originalFormat} → {file.targetFormat}</p>
+                                    <div className="flex items-center gap-2 pt-3 border-t border-white/5">
+                                        <button
+                                            onClick={() => playAudio(file)}
+                                            className={`w-8 h-8 flex items-center justify-center rounded-full transition-all ${playingId === file.id ? "bg-cyan-500 text-black" : "bg-zinc-800 text-white hover:bg-zinc-700"}`}
+                                        >
+                                            {playingId === file.id ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3 ml-0.5" />}
+                                        </button>
+                                        <div className="flex-1 text-right text-xs">
+                                            {file.status === 'converting' && <span className="text-cyan-400">%{file.progress}</span>}
+                                            {file.status === 'done' && (
+                                                <button className="text-emerald-400 hover:underline" onClick={() => downloadFile(file)}>İndir</button>
+                                            )}
+                                            {file.status === 'waiting' && <span className="text-zinc-600">Bekliyor</span>}
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
-                        )
-                    ))}
+                            )
+                        ))}
+                    </div>
+
+                    {files.length > 0 && (
+                        <div className="shrink-0 flex items-center justify-end gap-3 mt-6 pt-4 border-t border-white/5">
+                            <Button
+                                variant="ghost"
+                                onClick={handleClearAll}
+                                className="text-zinc-500 hover:text-red-400 hover:bg-red-500/10 gap-2"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                                {t.audioConverter.clearAll}
+                            </Button>
+
+                            <div className="flex-1"></div>
+
+                            {completedFilesCount > 0 && (
+                                <Button
+                                    variant="secondary"
+                                    onClick={downloadAllAsZip}
+                                    disabled={isDownloadingAll}
+                                    className="bg-zinc-800 hover:bg-zinc-700 text-white border border-white/5 gap-2 px-6"
+                                >
+                                    {isDownloadingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
+                                    {t.audioConverter.downloadAll}
+                                </Button>
+                            )}
+
+                            <Button
+                                onClick={convertAll}
+                                disabled={isConverting || waitingFilesCount === 0}
+                                className="bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 text-black font-bold shadow-lg shadow-cyan-500/25 border-0 gap-2 px-8"
+                            >
+                                {isConverting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                                {isConverting ? t.audioConverter.processing : t.audioConverter.convert}
+                                {waitingFilesCount > 0 && !isConverting && ` (${waitingFilesCount})`}
+                            </Button>
+                        </div>
+                    )}
                 </div>
-            </div>
+            )}
+
+            {/* Audio Trim Dialog */}
+            <AudioTrimDialog
+                isOpen={trimDialogOpen}
+                onClose={() => {
+                    setTrimDialogOpen(false);
+                    setTrimTargetFile(null);
+                }}
+                audioFile={trimTargetFile}
+                onTrim={trimAudio}
+            />
         </div>
     );
 }
