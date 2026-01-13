@@ -27,7 +27,6 @@ import {
     AudioFile,
     SUPPORTED_AUDIO_EXTENSIONS,
     generateId,
-    formatFileSize,
     formatAudioTime
 } from "@/lib/types";
 import { useTranslation } from "@/lib/LanguageContext";

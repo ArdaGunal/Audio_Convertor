@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Scissors, Play, Pause, RotateCcw, Download, Loader2 } from "lucide-react";
-import { AudioFile, formatAudioTime, getConvertedFileName } from "@/lib/types";
+import { AudioFile, formatAudioTime } from "@/lib/types";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
 import { useTranslation } from "@/lib/LanguageContext";
@@ -50,7 +50,6 @@ export default function AudioTrimDialog({ isOpen, onClose, audioFile, onTrim }: 
     }, []);
 
     const audioRef = useRef<HTMLAudioElement | null>(null);
-    const canvasRef = useRef<HTMLCanvasElement>(null);
 
     // Initialize when dialog opens
     useEffect(() => {
