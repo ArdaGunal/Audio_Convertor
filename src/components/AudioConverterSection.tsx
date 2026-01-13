@@ -53,11 +53,12 @@ export default function AudioConverterSection() {
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
-    const ffmpegRef = useRef(new FFmpeg());
+    const ffmpegRef = useRef<FFmpeg | null>(null);
     const messageRef = useRef<HTMLParagraphElement | null>(null);
 
     const load = async () => {
         const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
+        ffmpegRef.current = new FFmpeg();
         const ffmpeg = ffmpegRef.current;
         ffmpeg.on("log", ({ message }) => {
             console.log(message);
@@ -254,7 +255,7 @@ export default function AudioConverterSection() {
 
     const convertAll = async () => {
         if (files.length === 0 || isConverting) return;
-        if (!ffmpegLoaded) {
+        if (!ffmpegLoaded || !ffmpegRef.current) {
             console.error("FFmpeg not loaded yet");
             return;
         }
