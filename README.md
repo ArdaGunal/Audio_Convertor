@@ -1,36 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🎵 AudioForge
 
-## Getting Started
+**AudioForge**, modern web teknolojileri ile geliştirilmiş, şık ve güçlü bir ses dönüştürme ve video-ses ayrıştırma stüdyosudur. Tarayıcı tabanlı çalışır, gizliliğe önem verir ve dosyalarınızı sunucuya yüklemeden yerel olarak işler (Web Audio API).
 
-First, run the development server:
+![AudioForge Cover](https://images.unsplash.com/photo-1614149162883-504ce4d13909?q=80&w=2608&auto=format&fit=crop)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## ✨ Özellikler
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 🎧 Ses Dönüştürücü
+*   **Format Desteği:** MP3, WAV, FLAC, M4A, OGG, AAC, WMA
+*   **Toplu Dönüştürme:** Birden fazla dosyayı aynı anda işleyin.
+*   **Anlık Önizleme:** Dönüştürmeden önce veya sonra dosyaları dinleyin.
+*   **Seek Bar:** Ses dosyaları üzerinde istediğiniz saniyeye atlayın.
+*   **ZIP İndirme:** Tüm dönüştürülen dosyaları tek tıkla ZIP olarak indirin.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 🎬 Video'dan Ses Çıkarıcı
+*   **Video Desteği:** MP4, MKV, AVI, WEBM, MOV
+*   **Hızlı Ayrıştırma:** Videolarınızdan yüksek kaliteli WAV/MP3 ses dosyaları oluşturun.
+*   **Sürükle & Bırak:** Büyük video dosyalarını kolayca arayüze bırakın.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 🎨 Arayüz & Deneyim
+*   **Sinematik Tasarım:** Tam ekran, modern ve "karanlık mod" odaklı arayüz.
+*   **Dinamik Görünüm:** Liste veya Izgara (Grid) görünümü arasında geçiş yapın.
+*   **Glassmorphism:** Modern cam efektleri ve neon detaylar.
 
-## Learn More
+## 🛠️ Teknolojiler
 
-To learn more about Next.js, take a look at the following resources:
+Bu proje aşağıdaki teknolojiler kullanılarak geliştirilmiştir:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+*   **[Next.js 14](https://nextjs.org/)** - React Framework (App Router)
+*   **[TypeScript](https://www.typescriptlang.org/)** - Tip güvenliği
+*   **[Tailwind CSS](https://tailwindcss.com/)** - Styling
+*   **[Shadcn/ui](https://ui.shadcn.com/)** - UI Bileşenleri
+*   **[Lucide React](https://lucide.dev/)** - İkon seti
+*   **Web Audio API** - Tarayıcı tabanlı ses işleme
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🚀 Kurulum
 
-## Deploy on Vercel
+Projeyi kendi bilgisayarınızda çalıştırmak için:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1.  **Repoyu klonlayın:**
+    ```bash
+    git clone https://github.com/ArdaGunal/Audio_Convertor.git
+    cd Audio_Convertor
+    ```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+2.  **Bağımlılıkları yükleyin:**
+    ```bash
+    npm install
+    ```
+
+3.  **Geliştirme sunucusunu başlatın:**
+    ```bash
+    npm run dev
+    ```
+
+4.  Tarayıcınızda `http://localhost:3000` (veya `3001`) adresine gidin.
+
+## 📄 Lisans
+
+Bu proje MIT lisansı ile lisanslanmıştır.
