@@ -5,6 +5,7 @@ import { Github, Settings, Headphones, Music, Video, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import AudioConverterSection from "@/components/AudioConverterSection";
 import VideoExtractorSection from "@/components/VideoExtractorSection";
+import SettingsDialog from "@/components/SettingsDialog";
 
 type TabType = "audio" | "video";
 
@@ -47,8 +48,8 @@ export default function AudioForge() {
               <button
                 onClick={() => setActiveTab("audio")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${activeTab === "audio"
-                    ? "bg-white/10 text-white shadow-sm ring-1 ring-white/5"
-                    : "text-white/40 hover:text-white hover:bg-white/5"
+                  ? "bg-white/10 text-white shadow-sm ring-1 ring-white/5"
+                  : "text-white/40 hover:text-white hover:bg-white/5"
                   }`}
               >
                 <Music className="h-4 w-4" />
@@ -57,8 +58,8 @@ export default function AudioForge() {
               <button
                 onClick={() => setActiveTab("video")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${activeTab === "video"
-                    ? "bg-white/10 text-white shadow-sm ring-1 ring-white/5"
-                    : "text-white/40 hover:text-white hover:bg-white/5"
+                  ? "bg-white/10 text-white shadow-sm ring-1 ring-white/5"
+                  : "text-white/40 hover:text-white hover:bg-white/5"
                   }`}
               >
                 <Video className="h-4 w-4" />
@@ -68,13 +69,13 @@ export default function AudioForge() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" className="text-white/40 hover:text-white gap-2">
-              <Github className="h-4 w-4" />
-              <span className="hidden sm:inline">GitHub</span>
+            <Button variant="ghost" size="sm" className="text-white/40 hover:text-white gap-2" asChild>
+              <a href="https://github.com/ArdaGunal/Audio_Convertor" target="_blank" rel="noopener noreferrer">
+                <Github className="h-4 w-4" />
+                <span className="hidden sm:inline">GitHub</span>
+              </a>
             </Button>
-            <Button variant="ghost" size="icon" className="text-white/40 hover:text-white">
-              <Settings className="h-4 w-4" />
-            </Button>
+            <SettingsDialog />
           </div>
         </div>
       </header>
