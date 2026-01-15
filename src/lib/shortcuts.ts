@@ -1,7 +1,7 @@
 
 import { useEffect, useState } from 'react';
 
-export type ShortcutAction = 'split' | 'delete' | 'playPause' | 'cut' | 'copy' | 'paste';
+export type ShortcutAction = 'split' | 'delete' | 'playPause' | 'cut' | 'copy' | 'paste' | 'undo' | 'redo';
 
 export interface ShortcutMap {
     split: string;
@@ -10,6 +10,8 @@ export interface ShortcutMap {
     cut: string;
     copy: string;
     paste: string;
+    undo: string;
+    redo: string;
 }
 
 export const DEFAULT_SHORTCUTS: ShortcutMap = {
@@ -19,6 +21,8 @@ export const DEFAULT_SHORTCUTS: ShortcutMap = {
     cut: 'Ctrl+X',
     copy: 'Ctrl+C',
     paste: 'Ctrl+V',
+    undo: 'Ctrl+Z',
+    redo: 'Ctrl+Y',
 };
 
 export const SHORTCUT_LABELS: Record<ShortcutAction, { tr: string, en: string }> = {
@@ -28,6 +32,8 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, { tr: string, en: string }>
     cut: { tr: 'Kes', en: 'Cut' },
     copy: { tr: 'Kopyala', en: 'Copy' },
     paste: { tr: 'Yapıştır', en: 'Paste' },
+    undo: { tr: 'Geri Al', en: 'Undo' },
+    redo: { tr: 'İleri Al', en: 'Redo' },
 };
 
 export function useShortcuts() {

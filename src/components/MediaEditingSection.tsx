@@ -39,13 +39,13 @@ export default function MediaEditingSection() {
         setCurrentTime,
         isPlaying,
         setIsPlaying,
-        selectedClipId,
-        setSelectedClipId,
+        selectedClipIds,
+        handleClipSelect,
         volume,
         setVolume,
         pixelsPerSecond,
         setPixelsPerSecond,
-        clipboardClip,
+        clipboardClips,
         duration,
         handleDropFile,
         handleClipMove,
@@ -57,6 +57,9 @@ export default function MediaEditingSection() {
         handleCopy,
         handleCut,
         handlePaste,
+        handleUndo,
+        handleRedo,
+        handleExtractAudio,
         removeClipsForFile,
     } = useTimeline({ files, language });
 
@@ -99,19 +102,19 @@ export default function MediaEditingSection() {
                 e.preventDefault();
                 setIsPlaying(prev => !prev);
             }
-            if (matchesShortcut(e, 'delete') && selectedClipId) {
+            if (matchesShortcut(e, 'delete') && selectedClipIds.length > 0) {
                 e.preventDefault();
-                handleClipDelete(selectedClipId);
+                handleClipDelete(); // No args means delete selected
             }
-            if (matchesShortcut(e, 'split') && selectedClipId) {
+            if (matchesShortcut(e, 'split') && selectedClipIds.length > 0) {
                 e.preventDefault();
                 handleSplitClip();
             }
-            if (matchesShortcut(e, 'copy') && selectedClipId) {
+            if (matchesShortcut(e, 'copy') && selectedClipIds.length > 0) {
                 e.preventDefault();
                 handleCopy();
             }
-            if (matchesShortcut(e, 'cut') && selectedClipId) {
+            if (matchesShortcut(e, 'cut') && selectedClipIds.length > 0) {
                 e.preventDefault();
                 handleCut();
             }
@@ -119,22 +122,36 @@ export default function MediaEditingSection() {
                 e.preventDefault();
                 handlePaste();
             }
+            if (matchesShortcut(e, 'undo')) {
+                e.preventDefault();
+                handleUndo();
+            }
+            if (matchesShortcut(e, 'redo')) {
+                e.preventDefault();
+                handleRedo();
+            }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [selectedClipId, currentTime, isPlaying, matchesShortcut, handleClipDelete, handleSplitClip, handleCopy, handleCut, handlePaste]);
+    }, [selectedClipIds, currentTime, isPlaying, matchesShortcut, handleClipDelete, handleSplitClip, handleCopy, handleCut, handlePaste, handleUndo, handleRedo]);
 
     // Context Menu Handlers
     const handleClipContextMenu = (e: React.MouseEvent, clipId: string) => {
         e.preventDefault();
         e.stopPropagation();
-        setSelectedClipId(clipId);
+
+        // If the right-clicked clip is NOT in the current selection, select ONLY it
+        if (!selectedClipIds.includes(clipId)) {
+            handleClipSelect(clipId, false);
+        }
+        // If it IS in selection, keep selection as is so we can apply action to all
+
         setContextMenuState({
             visible: true,
             x: e.clientX,
             y: e.clientY,
-            clipId
+            clipId: clipId
         });
     };
 
@@ -148,14 +165,25 @@ export default function MediaEditingSection() {
         });
     };
 
-    const handleContextMenuAction = (action: ContextMenuAction) => {
+    const handleContextMenuAction = (action: any) => {
         switch (action) {
-            case 'split': handleSplitClip(); break;
-            case 'cut': handleCut(); break;
-            case 'copy': handleCopy(); break;
-            case 'paste': handlePaste(); break;
+            case 'split':
+                handleSplitClip();
+                break;
+            case 'cut':
+                handleCut();
+                break;
+            case 'copy':
+                handleCopy();
+                break;
+            case 'paste':
+                handlePaste();
+                break;
             case 'delete':
-                if (contextMenuState.clipId) handleClipDelete(contextMenuState.clipId);
+                handleClipDelete();
+                break;
+            case 'extractAudio':
+                handleExtractAudio();
                 break;
         }
     };
@@ -250,9 +278,10 @@ export default function MediaEditingSection() {
                         tracks={tracks}
                         files={files}
                         currentTime={currentTime}
-                        selectedClipId={selectedClipId}
+                        duration={duration}
+                        selectedClipIds={selectedClipIds}
                         pixelsPerSecond={pixelsPerSecond}
-                        onClipSelect={setSelectedClipId}
+                        onClipSelect={handleClipSelect}
                         onClipMove={handleClipMove}
                         onClipTrim={handleClipTrim}
                         onClipDelete={handleClipDelete}
@@ -261,6 +290,7 @@ export default function MediaEditingSection() {
                         onDropFile={handleDropFile}
                         onClipContextMenu={handleClipContextMenu}
                         onTimelineContextMenu={handleTimelineContextMenu}
+                        onTimeChange={setCurrentTime}
                     />
                 </div>
             </div>
@@ -270,7 +300,7 @@ export default function MediaEditingSection() {
                 <ToolsPanel
                     zoom={pixelsPerSecond}
                     onZoomChange={setPixelsPerSecond}
-                    selectedClipId={selectedClipId}
+                    selectedClipIds={selectedClipIds}
                     onSplitClip={handleSplitClip}
                     onExport={handleExport}
                     exportProgress={exportProgress}
@@ -300,8 +330,16 @@ export default function MediaEditingSection() {
                     y={contextMenuState.y}
                     onAction={handleContextMenuAction}
                     onClose={() => setContextMenuState(prev => ({ ...prev, visible: false }))}
-                    canPaste={!!clipboardClip}
+                    canPaste={!!clipboardClips.length}
                     isClipContext={!!contextMenuState.clipId}
+                    clipHasAudio={(() => {
+                        // Check if the RIGHT CLICKED clip has audio. 
+                        // If it's part of selection, check others? No, usually checking the target is enough OR check all selected.
+                        // For safety, let's check the context ID clip specifically as that's what the menu is "on".
+                        if (!contextMenuState.clipId) return false;
+                        const clip = tracks.flatMap(t => t.clips).find(c => c.id === contextMenuState.clipId);
+                        return clip?.hasAudio !== false;
+                    })()}
                 />
             )}
 

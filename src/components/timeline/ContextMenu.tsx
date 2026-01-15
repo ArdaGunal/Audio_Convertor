@@ -1,9 +1,9 @@
 
 import React, { useRef, useEffect } from 'react';
-import { Scissors, Copy, Clipboard, Trash2, SplitSquareHorizontal } from 'lucide-react';
+import { Scissors, Copy, Clipboard, Trash2, SplitSquareHorizontal, FileAudio } from 'lucide-react';
 import { useTranslation } from "@/lib/LanguageContext";
 
-export type ContextMenuAction = 'split' | 'cut' | 'copy' | 'paste' | 'delete';
+export type ContextMenuAction = 'split' | 'cut' | 'copy' | 'paste' | 'delete' | 'extractAudio';
 
 interface ContextMenuProps {
     x: number;
@@ -12,9 +12,10 @@ interface ContextMenuProps {
     onClose: () => void;
     canPaste: boolean;
     isClipContext: boolean;
+    clipHasAudio: boolean;
 }
 
-export default function ContextMenu({ x, y, onAction, onClose, canPaste, isClipContext }: ContextMenuProps) {
+export default function ContextMenu({ x, y, onAction, onClose, canPaste, isClipContext, clipHasAudio }: ContextMenuProps) {
     const { language } = useTranslation();
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -31,10 +32,7 @@ export default function ContextMenu({ x, y, onAction, onClose, canPaste, isClipC
             }
         };
 
-        // Delay adding event listener to avoid immediate closing if triggered by click
-        // setTimeout(() => {
         document.addEventListener('mousedown', handleClickOutside);
-        // }, 0);
         document.addEventListener('keydown', handleEscape);
 
         return () => {
@@ -45,6 +43,7 @@ export default function ContextMenu({ x, y, onAction, onClose, canPaste, isClipC
 
     const items = [
         { id: 'split', icon: SplitSquareHorizontal, label: language === 'tr' ? 'Böl' : 'Split', shortcut: 'Ctrl+B', disabled: !isClipContext },
+        { id: 'extractAudio', icon: FileAudio, label: language === 'tr' ? 'Sesi Ayır' : 'Extract Audio', disabled: !isClipContext || !clipHasAudio },
         { id: 'cut', icon: Scissors, label: language === 'tr' ? 'Kes' : 'Cut', shortcut: 'Ctrl+X', disabled: !isClipContext },
         { id: 'copy', icon: Copy, label: language === 'tr' ? 'Kopyala' : 'Copy', shortcut: 'Ctrl+C', disabled: !isClipContext },
         { id: 'paste', icon: Clipboard, label: language === 'tr' ? 'Yapıştır' : 'Paste', shortcut: 'Ctrl+V', disabled: !canPaste },

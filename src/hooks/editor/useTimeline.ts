@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback } from 'react';
 import { TimelineTrack, TimelineClip, MediaFile, generateId } from '@/lib/types';
 
@@ -7,7 +8,7 @@ interface UseTimelineProps {
 }
 
 export function useTimeline({ files, language }: UseTimelineProps) {
-    // Helper to sanitize tracks and ensure unique IDs (fixes legacy data issues)
+    // Helper to sanitize tracks
     const sanitizeTracks = (tracks: TimelineTrack[]): TimelineTrack[] => {
         const seenIds = new Set<string>();
         return tracks.map(track => ({
@@ -15,7 +16,6 @@ export function useTimeline({ files, language }: UseTimelineProps) {
             clips: track.clips.map(clip => {
                 let clipId = clip.id;
                 if (seenIds.has(clipId)) {
-                    // ID collision detected (likely from old bug), generate new ID
                     clipId = generateId();
                 }
                 seenIds.add(clipId);
@@ -25,57 +25,47 @@ export function useTimeline({ files, language }: UseTimelineProps) {
     };
 
     const [tracks, setTracks] = useState<TimelineTrack[]>(() => {
-        // Try to load saved tracks from localStorage
         if (typeof window !== 'undefined') {
             try {
                 const savedTracks = localStorage.getItem('timeline_tracks');
                 if (savedTracks) {
-                    const parsed = JSON.parse(savedTracks);
-                    return sanitizeTracks(parsed);
+                    return sanitizeTracks(JSON.parse(savedTracks));
                 }
             } catch (e) {
                 console.error('Failed to load timeline tracks:', e);
             }
         }
-        // Default tracks if nothing saved
         return [
-            {
-                id: 'video-track-1',
-                type: 'video',
-                name: 'Video Track 1',
-                clips: [],
-                muted: false,
-                volume: 100,
-                locked: false,
-            },
-            {
-                id: 'audio-track-1',
-                type: 'audio',
-                name: 'Audio Track 1',
-                clips: [],
-                muted: false,
-                volume: 100,
-                locked: false,
-            },
+            { id: 'video-track-1', type: 'video', name: 'Video Track 1', clips: [], muted: false, volume: 100, locked: false },
+            { id: 'audio-track-1', type: 'audio', name: 'Audio Track 1', clips: [], muted: false, volume: 100, locked: false },
+            { id: 'audio-track-2', type: 'audio', name: 'Audio Track 2', clips: [], muted: false, volume: 100, locked: false },
         ];
     });
 
     const [currentTime, setCurrentTime] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
-    const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
+    const [selectedClipIds, setSelectedClipIds] = useState<string[]>([]);
     const [volume, setVolume] = useState(100);
     const [pixelsPerSecond, setPixelsPerSecond] = useState(50);
-    const [clipboardClip, setClipboardClip] = useState<{ clip: TimelineClip, type: 'video' | 'audio' } | null>(null);
+    const [clipboardClips, setClipboardClips] = useState<TimelineClip[]>([]);
 
-    // Calculate timeline duration
-    const duration = Math.max(
-        ...tracks.flatMap(track =>
-            track.clips.map(clip => clip.startTime + clip.duration)
-        ),
-        10 // Minimum 10 seconds for empty timeline
-    );
+    // History State
+    const [history, setHistory] = useState<TimelineTrack[][]>([]);
+    const [future, setFuture] = useState<TimelineTrack[][]>([]);
 
-    // Save tracks to localStorage when they change
+    const pushToHistory = useCallback((currentTracks: TimelineTrack[]) => {
+        setHistory(prev => {
+            const newHistory = [...prev, currentTracks];
+            if (newHistory.length > 50) return newHistory.slice(newHistory.length - 50);
+            return newHistory;
+        });
+        setFuture([]);
+    }, []);
+
+    // Duration calculation
+    const contentDuration = Math.max(0, ...tracks.flatMap(track => track.clips.map(clip => clip.startTime + clip.duration)));
+    const duration = contentDuration > 0 ? contentDuration : 10;
+
     useEffect(() => {
         try {
             localStorage.setItem('timeline_tracks', JSON.stringify(tracks));
@@ -87,7 +77,6 @@ export function useTimeline({ files, language }: UseTimelineProps) {
     // Playback loop
     useEffect(() => {
         if (!isPlaying) return;
-
         let animationFrameId: number;
         let lastTime = Date.now();
 
@@ -95,7 +84,6 @@ export function useTimeline({ files, language }: UseTimelineProps) {
             const now = Date.now();
             const delta = (now - lastTime) / 1000;
             lastTime = now;
-
             setCurrentTime(prev => {
                 const newTime = prev + delta;
                 if (newTime >= duration) {
@@ -104,51 +92,87 @@ export function useTimeline({ files, language }: UseTimelineProps) {
                 }
                 return newTime;
             });
-
             animationFrameId = requestAnimationFrame(tick);
         };
-
         animationFrameId = requestAnimationFrame(tick);
-
-        return () => {
-            if (animationFrameId) {
-                cancelAnimationFrame(animationFrameId);
-            }
-        };
+        return () => cancelAnimationFrame(animationFrameId);
     }, [isPlaying, duration]);
+
+    // Undo/Redo
+    const handleUndo = useCallback(() => {
+        setHistory(prev => {
+            if (prev.length === 0) return prev;
+            const previousState = prev[prev.length - 1];
+            setFuture(f => [tracks, ...f]);
+            setTracks(previousState);
+            return prev.slice(0, prev.length - 1);
+        });
+    }, [tracks]);
+
+    const handleRedo = useCallback(() => {
+        setFuture(prev => {
+            if (prev.length === 0) return prev;
+            const nextState = prev[0];
+            setHistory(h => [...h, tracks]);
+            setTracks(nextState);
+            return prev.slice(1);
+        });
+    }, [tracks]);
+
+    // Selection Logic
+    const handleClipSelect = useCallback((clipId: string | null, isShiftPressed: boolean) => {
+        if (clipId === null) {
+            // Deselect all if clicked on empty space (unless shift is pressed? No, usually clicking empty space clears)
+            // But if shift is pressed and we click empty space, maybe do nothing?
+            // Standard behavior: Click empty -> clear selection.
+            if (!isShiftPressed) {
+                setSelectedClipIds([]);
+            }
+            return;
+        }
+
+        setSelectedClipIds(prev => {
+            if (isShiftPressed) {
+                // Toggle
+                if (prev.includes(clipId)) {
+                    return prev.filter(id => id !== clipId);
+                } else {
+                    return [...prev, clipId];
+                }
+            } else {
+                // Exclusive select
+                // If already selected and just clicking without shift, usually keeps it selected.
+                // But if multiple selected and click one, usually deselects others.
+                return [clipId];
+            }
+        });
+    }, []);
 
 
     const handleDropFile = useCallback((file: MediaFile, trackType: 'video' | 'audio', dropTime: number) => {
-        // Use file's actual type, not the track type where it was dropped
         const correctTrackType = file.type;
-
         setTracks(prev => {
-            // Find appropriate track based on file type
             const track = prev.find(t => t.type === correctTrackType && !t.locked);
             if (!track) {
-                alert(language === 'tr'
-                    ? `${correctTrackType === 'video' ? 'Video' : 'Ses'} track bulunamadı veya kilitli`
-                    : `${correctTrackType === 'video' ? 'Video' : 'Audio'} track not found or locked`);
+                alert(language === 'tr' ? `${correctTrackType} kanalı bulunamadı` : `${correctTrackType} track not found`);
                 return prev;
             }
 
-            // Smart placement: Find the end of the last clip on this track
+            pushToHistory(prev);
+
             let smartStartTime = 0;
             if (track.clips.length > 0) {
-                // Sort clips by start time
                 const sortedClips = [...track.clips].sort((a, b) => a.startTime - b.startTime);
-                // Get the last clip's end time
                 const lastClip = sortedClips[sortedClips.length - 1];
                 smartStartTime = lastClip.startTime + lastClip.duration;
             }
 
-            // Create new clip
             const newClip: TimelineClip = {
                 id: generateId(),
                 type: file.type,
                 trackId: track.id,
                 fileId: file.id,
-                startTime: smartStartTime, // Place at the end of existing clips
+                startTime: smartStartTime, // Append to end
                 duration: file.duration || 5,
                 trimStart: 0,
                 trimEnd: 0,
@@ -156,324 +180,306 @@ export function useTimeline({ files, language }: UseTimelineProps) {
                 muted: false,
             };
 
-            return prev.map(t =>
-                t.id === track.id
-                    ? { ...t, clips: [...t.clips, newClip] }
-                    : t
-            );
+            return prev.map(t => t.id === track.id ? { ...t, clips: [...t.clips, newClip] } : t);
         });
-    }, [language]); // Only depend on language
+    }, [language, pushToHistory]);
 
     const handleClipMove = useCallback((clipId: string, newStartTime: number) => {
-        setTracks(prev => prev.map(track => ({
-            ...track,
-            clips: track.clips.map(clip =>
-                clip.id === clipId ? { ...clip, startTime: newStartTime } : clip
-            )
-        })));
-    }, []);
+        setTracks(prev => {
+            pushToHistory(prev);
+            return prev.map(track => ({
+                ...track,
+                clips: track.clips.map(clip => clip.id === clipId ? { ...clip, startTime: newStartTime } : clip)
+            }));
+        });
+    }, [pushToHistory]);
 
     const handleClipTrim = useCallback((clipId: string, newTrimStart: number, newTrimEnd: number) => {
-        setTracks(prev => prev.map(track => ({
-            ...track,
-            clips: track.clips.map(clip => {
-                if (clip.id === clipId) {
-                    const file = files.find(f => f.id === clip.fileId); // Note: this creates dependency on files
-                    // However, we can also pass files or use a ref if we want to avoid re-creating this callback often.
-                    // For now, depending on files is acceptable for data integrity.
+        setTracks(prev => {
+            pushToHistory(prev);
+            return prev.map(track => ({
+                ...track,
+                clips: track.clips.map(clip => {
+                    if (clip.id === clipId) {
+                        const file = files.find(f => f.id === clip.fileId);
+                        const maxDuration = (file?.duration || 0) - newTrimStart - newTrimEnd;
+                        return {
+                            ...clip,
+                            trimStart: newTrimStart,
+                            trimEnd: newTrimEnd,
+                            duration: Math.max(0.1, maxDuration)
+                        };
+                    }
+                    return clip;
+                })
+            }));
+        });
+    }, [files, pushToHistory]);
 
-                    const maxDuration = (file?.duration || 0) - newTrimStart - newTrimEnd;
-                    return {
-                        ...clip,
-                        trimStart: newTrimStart,
-                        trimEnd: newTrimEnd,
-                        duration: Math.max(0.1, maxDuration)
-                    };
-                }
-                return clip;
-            })
-        })));
-    }, [files]);
+    const handleClipDelete = useCallback((input?: string | string[]) => {
+        let targetIds: string[] = [];
 
-    const handleClipDelete = useCallback((clipId: string) => {
-        setTracks(prev => prev.map(track => ({
-            ...track,
-            clips: track.clips.filter(clip => clip.id !== clipId)
-        })));
-        setSelectedClipId(prev => prev === clipId ? null : prev);
-    }, []);
+        if (typeof input === 'string') {
+            targetIds = [input];
+        } else if (Array.isArray(input)) {
+            targetIds = input;
+        } else {
+            targetIds = selectedClipIds;
+        }
 
-    const handleTrackMuteToggle = useCallback((trackId: string) => {
-        setTracks(prev => prev.map(track =>
-            track.id === trackId ? { ...track, muted: !track.muted } : track
-        ));
-    }, []);
-
-    const handleTrackLockToggle = useCallback((trackId: string) => {
-        setTracks(prev => prev.map(track =>
-            track.id === trackId ? { ...track, locked: !track.locked } : track
-        ));
-    }, []);
-
-    const handleSplitClip = useCallback(() => {
-        if (!selectedClipId) return;
+        if (targetIds.length === 0) return;
 
         setTracks(prev => {
-            let clipToSplit: TimelineClip | null = null;
-            let trackId: string | null = null;
+            pushToHistory(prev);
+            return prev.map(track => ({
+                ...track,
+                clips: track.clips.filter(clip => !targetIds.includes(clip.id))
+            }));
+        });
+        setSelectedClipIds(prev => prev.filter(id => !targetIds.includes(id)));
+    }, [selectedClipIds, pushToHistory]);
 
-            // Find the selected clip in the *latest* state
-            for (const track of prev) {
-                const clip = track.clips.find(c => c.id === selectedClipId);
-                if (clip) {
-                    clipToSplit = clip;
-                    trackId = track.id;
-                    break;
-                }
-            }
+    const handleTrackMuteToggle = useCallback((trackId: string) => {
+        setTracks(prev => {
+            pushToHistory(prev);
+            return prev.map(track => track.id === trackId ? { ...track, muted: !track.muted } : track);
+        });
+    }, [pushToHistory]);
 
-            if (!clipToSplit || !trackId) return prev;
+    const handleTrackLockToggle = useCallback((trackId: string) => {
+        setTracks(prev => prev.map(track => track.id === trackId ? { ...track, locked: !track.locked } : track));
+    }, []);
 
-            // Check boundaries
-            const clipEnd = clipToSplit.startTime + clipToSplit.duration;
-            if (currentTime <= clipToSplit.startTime || currentTime >= clipEnd) {
-                // Alerting inside a setState callback is bad pattern, but for legacy support we keep it simple.
-                // Better to move logic out, but here we need access to latest Tracks.
-                // We'll skip alert here or handle it differently? 
-                // Actually this logic was previously outside setTracks.
-                // Let's refactor to read state first, but we need LATEST state.
-                // Since we have `tracks` in scope, we can use it, but strictly `prev` is safer.
+    // Batch Split
+    const handleSplitClipRobust = useCallback(() => {
+        if (selectedClipIds.length === 0) return;
+
+        setTracks(prev => {
+            let hasSplit = false;
+            const newTracks = prev.map(track => {
+                const clipsToSplit = track.clips.filter(c => selectedClipIds.includes(c.id));
+                if (clipsToSplit.length === 0) return track;
+
+                // Process splits for this track
+                const newClips = [...track.clips];
+
+                clipsToSplit.forEach(clip => {
+                    const clipEnd = clip.startTime + clip.duration;
+                    // Check intersection: playhead must be strictly inside (not at edges)
+                    if (currentTime > clip.startTime + 0.01 && currentTime < clipEnd - 0.01) {
+                        hasSplit = true;
+
+                        // Remove original
+                        const idx = newClips.findIndex(c => c.id === clip.id);
+                        if (idx !== -1) newClips.splice(idx, 1);
+
+                        const splitPoint = currentTime - clip.startTime;
+                        const newId1 = generateId();
+                        const newId2 = generateId();
+
+                        // Add new pieces
+                        newClips.push({
+                            ...clip,
+                            id: newId1,
+                            duration: splitPoint,
+                            trimEnd: clip.trimEnd + (clip.duration - splitPoint)
+                        });
+                        newClips.push({
+                            ...clip,
+                            id: newId2,
+                            startTime: currentTime,
+                            duration: clip.duration - splitPoint,
+                            trimStart: clip.trimStart + splitPoint
+                        });
+                    }
+                });
+
+                if (!hasSplit) return track; // Optimization if nothing changed on this track
+                return { ...track, clips: newClips.sort((a, b) => a.startTime - b.startTime) };
+            });
+
+            if (hasSplit) {
+                pushToHistory(prev);
+                // Update selection? Usually we select the second parts or keep original selection?
+                // For now, let's just clear selection to avoid confusion, or maybe select the new clips?
+                // Clearing is safer.
+                setSelectedClipIds([]);
+                return newTracks;
+            } else {
+                // No split happened
+                alert(language === 'tr' ? 'Kesilecek uygun klip bulunamadı (Playhead klip içinde olmalı)' : 'No suitable clips to split (Playhead must be inside)');
                 return prev;
             }
-
-            // Calculate split point
-            const splitPoint = currentTime - clipToSplit.startTime;
-
-            // Create two new clips
-            const clip1: TimelineClip = {
-                ...clipToSplit,
-                id: generateId(),
-                duration: splitPoint,
-                trimEnd: clipToSplit.trimEnd + (clipToSplit.duration - splitPoint),
-            };
-
-            const clip2: TimelineClip = {
-                ...clipToSplit,
-                id: generateId(),
-                startTime: currentTime,
-                duration: clipToSplit.duration - splitPoint,
-                trimStart: clipToSplit.trimStart + splitPoint,
-            };
-
-            // Select the first part
-            // Side effect in reducer? No. We'll set selectedClipId outside/after.
-            // We need a way to signal this. For now let's just do the mutation.
-
-            return prev.map(track => {
-                if (track.id === trackId) {
-                    return {
-                        ...track,
-                        clips: track.clips
-                            .filter(c => c.id !== selectedClipId)
-                            .concat([clip1, clip2])
-                            .sort((a, b) => a.startTime - b.startTime)
-                    };
-                }
-                return track;
-            });
         });
-
-        // Note: selectedClipId update is slightly async from the track update above but acceptable.
-        // To be perfectly precise, we'd need to know the new IDs here. 
-        // We can't easily set selectedClipId to clip1.id here because clip1 is created inside the callback scope 
-        // if we follow the pure functional pattern stricly. 
-
-        // REVERTING TO SIMPLE LOGIC for Split to avoid complexity, but using tracks dependency.
-        // See implementation below.
-    }, [selectedClipId, currentTime]); // DEPENDS on tracks? See below rewrite.
-
-    // Better Split Implementation that is cleaner
-    const handleSplitClipRobust = useCallback(() => {
-        if (!selectedClipId) return;
-
-        // We need direct access to tracks to validate. 
-        // Since `tracks` is in dependency, this callback updates when tracks change.
-        let clipToSplit: TimelineClip | null = null;
-        let trackId: string | null = null;
-
-        for (const track of tracks) {
-            const clip = track.clips.find(c => c.id === selectedClipId);
-            if (clip) {
-                clipToSplit = clip;
-                trackId = track.id;
-                break;
-            }
-        }
-
-        if (!clipToSplit || !trackId) return;
-
-        const clipEnd = clipToSplit.startTime + clipToSplit.duration;
-        if (currentTime <= clipToSplit.startTime || currentTime >= clipEnd) {
-            alert(language === 'tr'
-                ? 'Playhead clip i\u00e7inde de\u011fil'
-                : 'Playhead is not within the clip');
-            return;
-        }
-
-        const splitPoint = currentTime - clipToSplit.startTime;
-        const newId1 = generateId();
-        const newId2 = generateId();
-
-        const clip1: TimelineClip = {
-            ...clipToSplit,
-            id: newId1,
-            duration: splitPoint,
-            trimEnd: clipToSplit.trimEnd + (clipToSplit.duration - splitPoint),
-        };
-
-        const clip2: TimelineClip = {
-            ...clipToSplit,
-            id: newId2,
-            startTime: currentTime,
-            duration: clipToSplit.duration - splitPoint,
-            trimStart: clipToSplit.trimStart + splitPoint,
-        };
-
-        setTracks(prev => prev.map(track => {
-            if (track.id === trackId) {
-                return {
-                    ...track,
-                    clips: track.clips
-                        .filter(c => c.id !== selectedClipId)
-                        .concat([clip1, clip2])
-                        .sort((a, b) => a.startTime - b.startTime)
-                };
-            }
-            return track;
-        }));
-        setSelectedClipId(newId1);
-
-    }, [tracks, selectedClipId, currentTime, language]);
-
+    }, [selectedClipIds, currentTime, language, pushToHistory]);
 
     const handleCopy = useCallback(() => {
-        if (!selectedClipId) return;
-
-        let foundClip: TimelineClip | undefined;
-        let foundType: 'video' | 'audio' | undefined;
-
-        for (const track of tracks) {
-            const clip = track.clips.find(c => c.id === selectedClipId);
-            if (clip) {
-                foundClip = clip;
-                foundType = track.type;
-                break;
-            }
+        if (selectedClipIds.length === 0) return;
+        const clipsToCopy: TimelineClip[] = [];
+        tracks.forEach(track => {
+            track.clips.forEach(clip => {
+                if (selectedClipIds.includes(clip.id)) {
+                    clipsToCopy.push({ ...clip });
+                }
+            });
+        });
+        if (clipsToCopy.length > 0) {
+            setClipboardClips(clipsToCopy);
         }
-
-        if (foundClip && foundType) {
-            setClipboardClip({ clip: { ...foundClip }, type: foundType });
-        }
-    }, [tracks, selectedClipId]);
+    }, [tracks, selectedClipIds]);
 
     const handleCut = useCallback(() => {
         handleCopy();
-        if (selectedClipId) {
-            handleClipDelete(selectedClipId);
-        }
-    }, [handleCopy, handleClipDelete, selectedClipId]);
+        handleClipDelete();
+    }, [handleCopy, handleClipDelete]);
 
-    const handlePaste = useCallback(() => {
-        if (!clipboardClip) return;
-
-        setTracks(prev => {
-            // Use functional update to be safe
-            // We need to find target track in current state
-            const targetTrack = prev.find(t => t.type === clipboardClip.type && !t.locked);
-
-            if (!targetTrack) return prev;
-
-            const newClipId = generateId();
-            const newClip = {
-                ...clipboardClip.clip,
-                id: newClipId,
-                startTime: currentTime,
-            };
-
-            // Queue the selection update? We can't do it here easily.
-            // Using a ref or Effect for selection could be cleaner, but for now:
-            // We can't setSelectedClipId inside here safely if we want to be pure.
-            // But we can just use the outer scope `setSelectedClipId` if we accept that it runs after render.
-            // Actually, let's just do it outside.
-
-            return prev.map(track => {
-                if (track.id === targetTrack.id) {
-                    return {
-                        ...track,
-                        clips: [...track.clips, newClip]
-                    };
-                }
-                return track;
-            });
-        });
-
-        // This is slightly tricky: specific new ID is generated inside the callback in my thought above, 
-        // but needs to be known outside.
-        // Solution: Generate ID outside the setState callback.
-
-    }, [clipboardClip, currentTime]); // This version was incomplete logic-wise. 
-
-    // Correct Handle Paste
     const handlePasteRobust = useCallback(() => {
-        if (!clipboardClip) return;
+        if (clipboardClips.length === 0) return;
 
-        const newClipId = generateId();
-        const newClip = {
-            ...clipboardClip.clip,
-            id: newClipId,
-            startTime: currentTime,
-        };
+        // Calculate offset (time difference) for each clip relative to the earliest start time
+        const earliestStart = Math.min(...clipboardClips.map(c => c.startTime));
 
         setTracks(prev => {
-            const targetTrack = prev.find(t => t.type === clipboardClip.type && !t.locked);
-            if (!targetTrack) return prev;
+            pushToHistory(prev);
+            const nextTracks = [...prev];
+            const newSelection: string[] = [];
 
-            return prev.map(track => {
-                if (track.id === targetTrack.id) {
+            clipboardClips.forEach(clip => {
+                const offset = clip.startTime - earliestStart;
+                const pasteTime = currentTime + offset;
+
+                const targetTrack = nextTracks.find(t => t.type === clip.type && !t.locked) || nextTracks.find(t => t.type === clip.type);
+
+                if (targetTrack) {
+                    const newId = generateId();
+                    newSelection.push(newId);
+                    const newClip = {
+                        ...clip,
+                        id: newId,
+                        startTime: pasteTime,
+                        trackId: targetTrack.id
+                    };
+
+                    // Mutate nextTracks for efficiency in loop
+                    const trackIdx = nextTracks.findIndex(t => t.id === targetTrack.id);
+                    nextTracks[trackIdx] = {
+                        ...targetTrack,
+                        clips: [...targetTrack.clips, newClip]
+                    };
+                }
+            });
+
+            setSelectedClipIds(newSelection);
+            return nextTracks;
+        });
+
+    }, [clipboardClips, currentTime, pushToHistory]);
+
+    const handleExtractAudio = useCallback(() => {
+        if (selectedClipIds.length === 0) return;
+
+        setTracks(prev => {
+            const audioTrack = prev.find(t => t.type === 'audio' && !t.locked);
+            if (!audioTrack) {
+                alert(language === 'tr' ? 'Uygun ses kanalı bulunamadı' : 'No available audio track found');
+                return prev;
+            }
+
+            let hasChanged = false;
+            let alreadyExtractedCount = 0;
+
+            const newTracks = prev.map(track => {
+                if (track.type === 'video') {
+                    const clipsToProcess = track.clips.filter(c => selectedClipIds.includes(c.id));
+                    if (clipsToProcess.length === 0) return track;
+
+                    // Modify clean check
+                    const unextractedClips = clipsToProcess.filter(c => c.hasAudio !== false);
+                    if (unextractedClips.length === 0) {
+                        alreadyExtractedCount += clipsToProcess.length;
+                        return track;
+                    }
+
+                    hasChanged = true;
                     return {
                         ...track,
-                        clips: [...track.clips, newClip]
+                        clips: track.clips.map(c => {
+                            if (selectedClipIds.includes(c.id) && c.hasAudio !== false) {
+                                return { ...c, muted: true, hasAudio: false };
+                            }
+                            return c;
+                        })
                     };
                 }
                 return track;
             });
+
+            if (!hasChanged) {
+                if (alreadyExtractedCount > 0) {
+                    // alert(language === 'tr' ? 'Seçili videoların sesi zaten ayrılmış' : 'Audio already extracted from selected videos');
+                }
+                return prev;
+            }
+
+            // Now add audio clips
+            // We need to find the video clips again to create audio counterparts
+            // Simplification: We already marked them in newTracks. 
+            // Ideally we should process everything in one pass, but React state setter needs pure function.
+            // Let's iterate AGAIN over original tracks to find the valid clips to extract
+
+            const clipsToExtract: TimelineClip[] = [];
+            prev.forEach(track => {
+                if (track.type === 'video') {
+                    track.clips.forEach(c => {
+                        if (selectedClipIds.includes(c.id) && c.hasAudio !== false) {
+                            clipsToExtract.push(c);
+                        }
+                    });
+                }
+            });
+
+            const newAudioClips = clipsToExtract.map(videoClip => ({
+                ...videoClip,
+                id: generateId(),
+                type: 'audio' as const,
+                trackId: audioTrack.id,
+                fileId: videoClip.fileId,
+                muted: false,
+                volume: 100
+            }));
+
+            pushToHistory(prev);
+
+            // Add audio clips to audio track
+            return newTracks.map(track => {
+                if (track.id === audioTrack.id) {
+                    return { ...track, clips: [...track.clips, ...newAudioClips] };
+                }
+                return track;
+            });
         });
-        setSelectedClipId(newClipId);
-    }, [clipboardClip, currentTime]);
+    }, [selectedClipIds, language, pushToHistory]);
 
-
-    // Helper to remove clips when file is deleted
     const removeClipsForFile = useCallback((fileId: string) => {
-        setTracks(prev => prev.map(track => ({
-            ...track,
-            clips: track.clips.filter(clip => clip.fileId !== fileId)
-        })));
-    }, []);
+        setTracks(prev => {
+            const hasChanges = prev.some(t => t.clips.some(c => c.fileId === fileId));
+            if (hasChanges) pushToHistory(prev);
+            return prev.map(track => ({
+                ...track,
+                clips: track.clips.filter(clip => clip.fileId !== fileId)
+            }));
+        });
+    }, [pushToHistory]);
 
     return {
-        tracks,
-        setTracks,
-        currentTime,
-        setCurrentTime,
-        isPlaying,
-        setIsPlaying,
-        selectedClipId,
-        setSelectedClipId,
-        volume,
-        setVolume,
-        pixelsPerSecond,
-        setPixelsPerSecond,
-        clipboardClip,
+        tracks, setTracks,
+        currentTime, setCurrentTime,
+        isPlaying, setIsPlaying,
+        selectedClipIds,
+        handleClipSelect, // NEW: Replaces setSelectedClipId
+        volume, setVolume,
+        pixelsPerSecond, setPixelsPerSecond,
+        clipboardClips, // NEW
         duration,
         handleDropFile,
         handleClipMove,
@@ -485,6 +491,11 @@ export function useTimeline({ files, language }: UseTimelineProps) {
         handleCopy,
         handleCut,
         handlePaste: handlePasteRobust,
-        removeClipsForFile
+        handleUndo,
+        handleRedo,
+        handleExtractAudio,
+        removeClipsForFile,
+        canUndo: history.length > 0,
+        canRedo: future.length > 0
     };
 }

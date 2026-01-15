@@ -60,6 +60,7 @@ export interface TimelineClip {
     trimEnd: number;    // Trim from original end (seconds)
     volume: number;     // 0-100
     muted: boolean;
+    hasAudio?: boolean; // If false, treat as video-only (no volume controls)
 }
 
 export interface TimelineTrack {
@@ -77,7 +78,7 @@ export interface TimelineState {
     currentTime: number;
     duration: number;
     isPlaying: boolean;
-    selectedClipId: string | null;
+    selectedClipIds: string[];
     zoom: number;  // Pixels per second
 }
 

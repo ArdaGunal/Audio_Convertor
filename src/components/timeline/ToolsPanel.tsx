@@ -8,7 +8,7 @@ import { useTranslation } from "@/lib/LanguageContext";
 interface ToolsPanelProps {
     zoom: number;
     onZoomChange: (zoom: number) => void;
-    selectedClipId: string | null;
+    selectedClipIds: string[];
     onSplitClip: () => void;
     onExport: () => void;
     exportProgress?: number; // 0-100
@@ -18,7 +18,7 @@ interface ToolsPanelProps {
 export default function ToolsPanel({
     zoom,
     onZoomChange,
-    selectedClipId,
+    selectedClipIds,
     onSplitClip,
     onExport,
     exportProgress = 0,
@@ -67,7 +67,7 @@ export default function ToolsPanel({
                 </h3>
                 <Button
                     onClick={onSplitClip}
-                    disabled={!selectedClipId}
+                    disabled={selectedClipIds.length === 0}
                     className="w-full bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                     <Scissors className="w-4 h-4 mr-2" />
@@ -106,10 +106,12 @@ export default function ToolsPanel({
             </div>
 
             {/* Info */}
-            {selectedClipId && (
+            {selectedClipIds.length > 0 && (
                 <div className="p-3 bg-zinc-800/50 rounded-lg border border-white/5">
                     <p className="text-xs text-zinc-400">
-                        {language === 'tr' ? 'Clip seçildi' : 'Clip selected'}
+                        {language === 'tr'
+                            ? `${selectedClipIds.length} klip seçildi`
+                            : `${selectedClipIds.length} clip(s) selected`}
                     </p>
                     <p className="text-xs text-zinc-600 mt-1">
                         {language === 'tr'

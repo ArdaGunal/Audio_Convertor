@@ -9,7 +9,7 @@ interface ClipComponentProps {
     file: MediaFile;
     pixelsPerSecond: number;
     isSelected: boolean;
-    onSelect: () => void;
+    onSelect: (e: React.MouseEvent) => void;
     onMove: (newStartTime: number) => void;
     onTrim: (newTrimStart: number, newTrimEnd: number) => void;
     onDelete: () => void;
@@ -37,7 +37,7 @@ export default function ClipComponent({
     const handleMouseDown = (e: React.MouseEvent) => {
         if (e.button !== 0) return; // Only left click
         e.stopPropagation();
-        onSelect();
+        onSelect(e); // Pass event up for Shift+Click logic
         setIsDragging(true);
 
         const startX = e.clientX;
@@ -164,8 +164,8 @@ export default function ClipComponent({
                     {file.name}
                 </span>
 
-                {/* Mute indicator */}
-                {clip.muted && (
+                {/* Mute indicator - only show if clip has audio */}
+                {(clip.hasAudio !== false) && clip.muted && (
                     <VolumeX className="w-3 h-3 text-white/70 flex-shrink-0" />
                 )}
             </div>
