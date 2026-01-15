@@ -33,6 +33,8 @@ import { useTranslation } from "@/lib/LanguageContext";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
 import { saveFileToStorage, loadFilesFromStorage, deleteFileFromStorage, updateFileInStorage } from "@/lib/storage";
+import NormalizeDialog from "./NormalizeDialog";
+import AudioTrimDialog from "./AudioTrimDialog";
 
 export default function AudioToolsSection() {
     const { language } = useTranslation();
@@ -55,6 +57,13 @@ export default function AudioToolsSection() {
     const [isProcessing, setIsProcessing] = useState(false);
     const [processingMessage, setProcessingMessage] = useState("");
     const [ffmpegLoaded, setFfmpegLoaded] = useState(false);
+
+    // Normalize dialog state
+    const [normalizeDialogOpen, setNormalizeDialogOpen] = useState(false);
+    const [normalizeTargetFiles, setNormalizeTargetFiles] = useState<AudioFile[]>([]);
+
+    // Trim dialog state
+    const [trimDialogOpen, setTrimDialogOpen] = useState(false);
 
     // Refs
     const waveformRef = useRef<HTMLDivElement>(null);
@@ -633,6 +642,178 @@ export default function AudioToolsSection() {
         URL.revokeObjectURL(url);
     };
 
+    // Handle trim from AudioTrimDialog
+    const handleTrim = async (fileId: string, startTime: number, endTime: number) => {
+        const file = files.find(f => f.id === fileId);
+        if (!file || !ffmpegLoaded || !ffmpegRef.current) return;
+
+        setIsProcessing(true);
+        setProcessingMessage(language === 'tr' ? 'Kırpılıyor...' : 'Trimming...');
+
+        const ffmpeg = ffmpegRef.current;
+        const ext = file.originalFormat.toLowerCase();
+        const inputName = `input.${ext}`;
+        const outputName = `output.${ext}`;
+
+        try {
+            // Write input file
+            const fileData = file.convertedBlob || file.file;
+            if (fileData) {
+                await ffmpeg.writeFile(inputName, await fetchFile(fileData));
+            } else if (file.audioUrl) {
+                await ffmpeg.writeFile(inputName, await fetchFile(file.audioUrl));
+            }
+
+            // Trim
+            await ffmpeg.exec([
+                '-i', inputName,
+                '-ss', startTime.toString(),
+                '-to', endTime.toString(),
+                '-c', 'copy',
+                outputName
+            ]);
+
+            // Read output
+            const data = await ffmpeg.readFile(outputName);
+            const blob = new Blob([data as BlobPart], { type: `audio/${ext}` });
+            const newUrl = URL.createObjectURL(blob);
+
+            // Update file
+            const audio = new Audio(newUrl);
+            audio.onloadedmetadata = async () => {
+                setFiles(prev => prev.map(f => {
+                    if (f.id === fileId) {
+                        if (f.audioUrl) URL.revokeObjectURL(f.audioUrl);
+                        return {
+                            ...f,
+                            audioUrl: newUrl,
+                            convertedBlob: blob,
+                            duration: audio.duration,
+                        };
+                    }
+                    return f;
+                }));
+
+                // Update in IndexedDB
+                try {
+                    await updateFileInStorage(fileId, { blob, duration: audio.duration }, 'editor');
+                } catch (e) {
+                    console.error('Failed to update in storage:', e);
+                }
+
+                // Reload waveform
+                if (fileId === activeFileId) {
+                    setActiveFileId(null);
+                    setTimeout(() => setActiveFileId(fileId), 100);
+                }
+            };
+
+            // Cleanup
+            await ffmpeg.deleteFile(inputName);
+            await ffmpeg.deleteFile(outputName);
+
+        } catch (error) {
+            console.error("Trim error:", error);
+            alert(language === 'tr' ? 'Kırpma hatası' : 'Trim error');
+        } finally {
+            setIsProcessing(false);
+            setProcessingMessage("");
+        }
+    };
+
+    // Batch normalize files
+    const batchNormalize = async (fileIds: string[], targetLUFS: number, truePeak: number) => {
+        if (!ffmpegLoaded || !ffmpegRef.current) return;
+
+        setIsProcessing(true);
+        const ffmpeg = ffmpegRef.current;
+        const totalFiles = fileIds.length;
+        let processedCount = 0;
+
+        try {
+            for (const fileId of fileIds) {
+                const file = files.find(f => f.id === fileId);
+                if (!file) continue;
+
+                processedCount++;
+                setProcessingMessage(
+                    language === 'tr'
+                        ? `Normalize ediliyor ${processedCount}/${totalFiles}...`
+                        : `Normalizing ${processedCount}/${totalFiles}...`
+                );
+
+                const ext = file.originalFormat.toLowerCase();
+                const inputName = `input_${fileId}.${ext}`;
+                const outputName = `output_${fileId}.${ext}`;
+
+                // Write input file
+                const fileData = file.convertedBlob || file.file;
+                if (fileData) {
+                    await ffmpeg.writeFile(inputName, await fetchFile(fileData));
+                } else if (file.audioUrl) {
+                    await ffmpeg.writeFile(inputName, await fetchFile(file.audioUrl));
+                }
+
+                // Normalize with custom LUFS and true peak
+                await ffmpeg.exec([
+                    '-i', inputName,
+                    '-af', `loudnorm=I=${targetLUFS}:LRA=11:TP=${truePeak}`,
+                    outputName
+                ]);
+
+                // Read output
+                const data = await ffmpeg.readFile(outputName);
+                const blob = new Blob([data as BlobPart], { type: `audio/${ext}` });
+                const newUrl = URL.createObjectURL(blob);
+
+                // Update file in state
+                const audio = new Audio(newUrl);
+                await new Promise<void>((resolve) => {
+                    audio.onloadedmetadata = async () => {
+                        setFiles(prev => prev.map(f => {
+                            if (f.id === fileId) {
+                                if (f.audioUrl) URL.revokeObjectURL(f.audioUrl);
+                                return {
+                                    ...f,
+                                    audioUrl: newUrl,
+                                    convertedBlob: blob,
+                                    duration: audio.duration,
+                                };
+                            }
+                            return f;
+                        }));
+
+                        // Update in IndexedDB
+                        try {
+                            await updateFileInStorage(fileId, { blob, duration: audio.duration }, 'editor');
+                        } catch (e) {
+                            console.error('Failed to update in storage:', e);
+                        }
+
+                        resolve();
+                    };
+                });
+
+                // Cleanup
+                await ffmpeg.deleteFile(inputName);
+                await ffmpeg.deleteFile(outputName);
+            }
+
+            // Reload waveform for active file if it was normalized
+            if (activeFileId && fileIds.includes(activeFileId)) {
+                setActiveFileId(null);
+                setTimeout(() => setActiveFileId(activeFileId), 100);
+            }
+
+        } catch (error) {
+            console.error("Batch normalize error:", error);
+            alert(language === 'tr' ? 'Normalize hatası' : 'Normalize error');
+        } finally {
+            setIsProcessing(false);
+            setProcessingMessage("");
+        }
+    };
+
     const activeFile = files.find(f => f.id === activeFileId);
     const hasRegion = regionStart !== null && regionEnd !== null;
 
@@ -752,18 +933,28 @@ export default function AudioToolsSection() {
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => processAudio('crop')}
-                            disabled={!hasRegion || isProcessing}
+                            onClick={() => {
+                                if (activeFile) {
+                                    setTrimDialogOpen(true);
+                                }
+                            }}
+                            disabled={!activeFile || isProcessing}
                             className="text-cyan-400 hover:bg-cyan-500/10 disabled:opacity-40"
                         >
                             <Scissors className="w-4 h-4 mr-2" />
-                            {language === 'tr' ? 'Seçimi Kırp' : 'Crop Selection'}
+                            {language === 'tr' ? 'Kırp' : 'Trim'}
                         </Button>
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => processAudio('cut')}
-                            disabled={!hasRegion || isProcessing}
+                            onClick={() => {
+                                if (!hasRegion) {
+                                    alert(language === 'tr' ? 'Lütfen waveform\'da bir bölge seçin' : 'Please select a region on the waveform');
+                                } else {
+                                    processAudio('cut');
+                                }
+                            }}
+                            disabled={!activeFile || isProcessing}
                             className="text-red-400 hover:bg-red-500/10 disabled:opacity-40"
                         >
                             <Trash2 className="w-4 h-4 mr-2" />
@@ -772,8 +963,14 @@ export default function AudioToolsSection() {
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => processAudio('fadeIn')}
-                            disabled={!hasRegion || isProcessing}
+                            onClick={() => {
+                                if (!hasRegion) {
+                                    alert(language === 'tr' ? 'Lütfen waveform\'da bir bölge seçin' : 'Please select a region on the waveform');
+                                } else {
+                                    processAudio('fadeIn');
+                                }
+                            }}
+                            disabled={!activeFile || isProcessing}
                             className="text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-40"
                         >
                             <span className="mr-2">📈</span>
@@ -782,8 +979,14 @@ export default function AudioToolsSection() {
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => processAudio('fadeOut')}
-                            disabled={!hasRegion || isProcessing}
+                            onClick={() => {
+                                if (!hasRegion) {
+                                    alert(language === 'tr' ? 'Lütfen waveform\'da bir bölge seçin' : 'Please select a region on the waveform');
+                                } else {
+                                    processAudio('fadeOut');
+                                }
+                            }}
+                            disabled={!activeFile || isProcessing}
                             className="text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-40"
                         >
                             <span className="mr-2">📉</span>
@@ -792,8 +995,13 @@ export default function AudioToolsSection() {
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => processAudio('normalize')}
-                            disabled={isProcessing}
+                            onClick={() => {
+                                if (activeFile) {
+                                    setNormalizeTargetFiles([activeFile]);
+                                    setNormalizeDialogOpen(true);
+                                }
+                            }}
+                            disabled={!activeFile || isProcessing}
                             className="text-purple-400 hover:bg-purple-500/10 disabled:opacity-40"
                         >
                             <Volume2 className="w-4 h-4 mr-2" />
@@ -859,27 +1067,65 @@ export default function AudioToolsSection() {
                                         <p className="text-xs text-zinc-500">{formatAudioTime(file.duration || 0)}</p>
                                     </div>
 
-                                    {/* Quick actions - only show for active file with selection */}
-                                    {file.id === activeFileId && hasRegion && (
-                                        <div className="flex gap-1">
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); processAudio('crop'); }}
-                                                disabled={isProcessing}
-                                                className="p-1.5 text-cyan-400 hover:bg-cyan-500/10 rounded transition-colors disabled:opacity-40"
-                                                title={language === 'tr' ? 'Seçimi Kırp' : 'Crop Selection'}
-                                            >
-                                                <Scissors className="w-4 h-4" />
-                                            </button>
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); processAudio('cut'); }}
-                                                disabled={isProcessing}
-                                                className="p-1.5 text-red-400 hover:bg-red-500/10 rounded transition-colors disabled:opacity-40"
-                                                title={language === 'tr' ? 'Seçimi Sil' : 'Cut Selection'}
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                    )}
+                                    {/* Quick normalize button */}
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setNormalizeTargetFiles([file]);
+                                            setNormalizeDialogOpen(true);
+                                        }}
+                                        disabled={isProcessing}
+                                        className="p-1.5 text-purple-400 hover:bg-purple-500/10 rounded transition-colors disabled:opacity-40"
+                                        title={language === 'tr' ? 'Normalize' : 'Normalize'}
+                                    >
+                                        <Volume2 className="w-4 h-4" />
+                                    </button>
+
+                                    {/* Quick edit actions */}
+                                    <div className="flex gap-1">
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (file.id !== activeFileId) {
+                                                    selectFile(file.id);
+                                                    alert(language === 'tr' ? 'Lütfen waveform\'da bir bölge seçin' : 'Please select a region on the waveform');
+                                                } else if (!hasRegion) {
+                                                    alert(language === 'tr' ? 'Lütfen bir bölge seçin' : 'Please select a region');
+                                                } else {
+                                                    processAudio('crop');
+                                                }
+                                            }}
+                                            disabled={isProcessing}
+                                            className={`p-1.5 rounded transition-colors ${file.id === activeFileId && hasRegion
+                                                ? 'text-cyan-400 hover:bg-cyan-500/10'
+                                                : 'text-zinc-600 hover:text-cyan-400'
+                                                } disabled:opacity-40`}
+                                            title={language === 'tr' ? 'Seçimi Kırp' : 'Crop Selection'}
+                                        >
+                                            <Scissors className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (file.id !== activeFileId) {
+                                                    selectFile(file.id);
+                                                    alert(language === 'tr' ? 'Lütfen waveform\'da bir bölge seçin' : 'Please select a region on the waveform');
+                                                } else if (!hasRegion) {
+                                                    alert(language === 'tr' ? 'Lütfen bir bölge seçin' : 'Please select a region');
+                                                } else {
+                                                    processAudio('cut');
+                                                }
+                                            }}
+                                            disabled={isProcessing}
+                                            className={`p-1.5 rounded transition-colors ${file.id === activeFileId && hasRegion
+                                                ? 'text-red-400 hover:bg-red-500/10'
+                                                : 'text-zinc-600 hover:text-red-400'
+                                                } disabled:opacity-40`}
+                                            title={language === 'tr' ? 'Seçimi Sil' : 'Cut Selection'}
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
 
                                     {/* Move buttons */}
                                     <div className="flex gap-1">
@@ -952,6 +1198,22 @@ export default function AudioToolsSection() {
                     </Button>
                 </div>
             )}
+
+            {/* Normalize Dialog */}
+            <NormalizeDialog
+                isOpen={normalizeDialogOpen}
+                onClose={() => setNormalizeDialogOpen(false)}
+                files={normalizeTargetFiles}
+                onNormalize={batchNormalize}
+            />
+
+            {/* Trim Dialog */}
+            <AudioTrimDialog
+                isOpen={trimDialogOpen}
+                onClose={() => setTrimDialogOpen(false)}
+                audioFile={activeFile || null}
+                onTrim={handleTrim}
+            />
         </div>
     );
 }

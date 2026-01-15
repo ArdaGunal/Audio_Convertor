@@ -15,8 +15,8 @@ export default {
         audioConverterDesc: 'MP3, WAV, FLAC, M4A',
         videoToAudio: 'Video → Ses',
         videoToAudioDesc: 'MP4, MKV, AVI, WEBM',
-        tools: 'Düzenleme',
-        toolsDesc: 'Kırpma, Birleştirme',
+        editing: 'Medya Düzenleme',
+        editingDesc: 'Ses & Video Düzenleme',
     },
 
     // Audio Converter

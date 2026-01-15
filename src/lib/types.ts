@@ -28,6 +28,59 @@ export interface VideoFile {
     duration?: number;
 }
 
+// Unified media file for editing (supports both audio and video)
+export interface MediaFile {
+    id: string;
+    name: string;
+    size: number;
+    type: 'audio' | 'video';
+    originalFormat: string;
+    targetFormat: string;
+    status: 'waiting' | 'processing' | 'done' | 'error';
+    progress: number;
+    file?: File;
+    url?: string;
+    convertedBlob?: Blob;
+    duration?: number;
+    // Video specific
+    width?: number;
+    height?: number;
+    thumbnailUrl?: string;
+}
+
+// Timeline types for video editor
+export interface TimelineClip {
+    id: string;
+    type: 'video' | 'audio';
+    trackId: string;
+    fileId: string;  // Reference to MediaFile
+    startTime: number;  // Position on timeline (seconds)
+    duration: number;   // Clip duration (seconds)
+    trimStart: number;  // Trim from original start (seconds)
+    trimEnd: number;    // Trim from original end (seconds)
+    volume: number;     // 0-100
+    muted: boolean;
+}
+
+export interface TimelineTrack {
+    id: string;
+    type: 'video' | 'audio';
+    name: string;
+    clips: TimelineClip[];
+    muted: boolean;
+    volume: number;  // 0-100
+    locked: boolean;
+}
+
+export interface TimelineState {
+    tracks: TimelineTrack[];
+    currentTime: number;
+    duration: number;
+    isPlaying: boolean;
+    selectedClipId: string | null;
+    zoom: number;  // Pixels per second
+}
+
 export const SUPPORTED_AUDIO_FORMATS = ["MP3", "WAV", "M4A", "FLAC", "OGG", "AAC", "WMA"];
 export const SUPPORTED_AUDIO_EXTENSIONS = [".mp3", ".wav", ".m4a", ".flac", ".ogg", ".aac", ".wma"];
 export const SUPPORTED_VIDEO_EXTENSIONS = [".mp4", ".webm", ".mkv", ".avi", ".mov", ".wmv", ".flv"];
@@ -42,7 +95,10 @@ export const formatFileSize = (bytes: number): string => {
 };
 
 export const generateId = (): string => {
-    return Math.random().toString(36).substring(2, 15);
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+    return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
 };
 
 export const formatAudioTime = (seconds: number): string => {

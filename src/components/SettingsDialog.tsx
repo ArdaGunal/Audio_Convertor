@@ -8,9 +8,11 @@ import {
     Moon,
     RotateCcw,
     Github,
-    Laptop
+    Laptop,
+    Keyboard
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useShortcuts, SHORTCUT_LABELS, ShortcutAction, ShortcutMap } from "@/lib/shortcuts";
 import {
     Dialog,
     DialogContent,
@@ -41,6 +43,32 @@ export default function SettingsDialog() {
             await clearAllFilesFromStorage('video');
             window.location.reload();
         }
+    };
+
+    // Shortcuts state
+    const { shortcuts, saveShortcuts, resetShortcuts } = useShortcuts();
+    const [recordingAction, setRecordingAction] = useState<ShortcutAction | null>(null);
+
+    const handleKeyDown = (e: React.KeyboardEvent, action: ShortcutAction) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const modifiers = [];
+        if (e.ctrlKey) modifiers.push('Ctrl');
+        if (e.shiftKey) modifiers.push('Shift');
+        if (e.altKey) modifiers.push('Alt');
+
+        let key = e.key;
+        if (key === ' ') key = 'Space';
+        if (key.length === 1) key = key.toUpperCase();
+
+        // Don't record just modifiers
+        if (['Control', 'Shift', 'Alt', 'Meta'].includes(key)) return;
+
+        const shortcut = [...modifiers, key].join('+');
+
+        saveShortcuts({ ...shortcuts, [action]: shortcut });
+        setRecordingAction(null);
     };
 
     return (
@@ -98,6 +126,51 @@ export default function SettingsDialog() {
                                 <SelectItem value="system"><div className="flex items-center gap-2"><Laptop className="w-4 h-4" /> {t.settings.system}</div></SelectItem>
                             </SelectContent>
                         </Select>
+                    </div>
+
+                    <div className="h-px bg-white/5" />
+
+                    {/* Shortcuts Setting */}
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <label className="text-sm font-medium text-white/70 flex items-center gap-2">
+                                <Keyboard className="w-4 h-4 text-white/40" />
+                                {language === 'tr' ? 'Kısayollar' : 'Shortcuts'}
+                            </label>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={resetShortcuts}
+                                className="h-6 text-xs text-zinc-500 hover:text-zinc-300"
+                            >
+                                {language === 'tr' ? 'Sıfırla' : 'Reset Defaults'}
+                            </Button>
+                        </div>
+
+                        <div className="grid gap-2">
+                            {(Object.keys(shortcuts) as ShortcutAction[]).map((action) => (
+                                <div key={action} className="flex items-center justify-between p-2 rounded bg-zinc-900 border border-white/5">
+                                    <span className="text-sm text-zinc-300">
+                                        {language === 'tr' ? SHORTCUT_LABELS[action].tr : SHORTCUT_LABELS[action].en}
+                                    </span>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className={`h-7 w-24 font-mono text-xs border-white/10 ${recordingAction === action
+                                                ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 animate-pulse'
+                                                : 'bg-zinc-800 text-zinc-400'
+                                            }`}
+                                        onClick={() => setRecordingAction(action)}
+                                        onKeyDown={(e) => recordingAction === action && handleKeyDown(e, action)}
+                                    >
+                                        {recordingAction === action
+                                            ? (language === 'tr' ? 'Tuşa Basın...' : 'Press Key...')
+                                            : shortcuts[action]
+                                        }
+                                    </Button>
+                                </div>
+                            ))}
+                        </div>
                     </div>
 
                     <div className="h-px bg-white/5" />
